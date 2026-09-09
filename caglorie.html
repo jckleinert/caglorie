@@ -108,6 +108,15 @@
   .serves{color:#5b6172}.serves b{color:var(--logo-pink);font-weight:700}
   .serves.up b{color:var(--grass)}
   .art{margin:4px auto 2px;width:104px;height:104px;border:var(--stroke);border-radius:16px;background:#6C9BD2;box-shadow:4px 4px 0 var(--ink);display:grid;place-items:center;font-size:56px}
+  .art .food{display:block;line-height:1;transition:transform .15s}
+  .art .food.b1{-webkit-mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%);mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%)}
+  .art .food.b2{-webkit-mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%),radial-gradient(circle 26px at 18% 40%,transparent 99%,#000 100%);
+                -webkit-mask-composite:source-in;mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%),radial-gradient(circle 26px at 18% 40%,transparent 99%,#000 100%);mask-composite:intersect}
+  .art .food.b3{-webkit-mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%),radial-gradient(circle 26px at 18% 40%,transparent 99%,#000 100%),radial-gradient(circle 28px at 65% 80%,transparent 99%,#000 100%);
+                -webkit-mask-composite:source-in;mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%),radial-gradient(circle 26px at 18% 40%,transparent 99%,#000 100%),radial-gradient(circle 28px at 65% 80%,transparent 99%,#000 100%);mask-composite:intersect}
+  .art .food.gone{transform:scale(0);opacity:0;transition:transform .35s,opacity .35s}
+  .art .food.shake{animation:shake .25s}
+  @keyframes shake{25%{transform:rotate(-8deg) scale(.96)}75%{transform:rotate(6deg) scale(.96)}}
   .bar{height:12px;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:#fff}
   .bar i{display:block;height:100%;background:var(--c);width:100%;transition:width 1s linear}
   .status{text-align:center;color:#5b6172}
@@ -232,7 +241,7 @@
     </div>
   </section>
 
-  <div class="dev">Dev tools: <button id="addCag">+100 $CAG</button> <button id="toggleNft">Toggle NFT holder</button> <button id="reset">Reset my progress</button></div>
+  <div class="dev">Dev tools: <button id="addCag">+100 $CAG</button> <button id="toggleNft">Toggle NFT holder</button> <button id="toggleSound">Sound: on</button> <button id="reset">Reset my progress</button></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -289,6 +298,7 @@ const store = {
 };
 
 let state = null;
+const eating = {};
 const $ = s => document.querySelector(s);
 const setText = (el,v) => { if(el.textContent!==v) el.textContent=v; };
 const setHTML = (el,v) => { if(el.innerHTML!==v) el.innerHTML=v; };
@@ -298,11 +308,14 @@ async function init(){
   if(!state){
     const dlg = $('#nameDlg'); dlg.showModal();
     const name = await new Promise(res=>{ $('#nameOk').onclick=()=>{ const n=$('#nameInput').value.trim(); if(!n) return; dlg.close(); res(n); }; });
-    state = {name, calories:0, alltime:0, week:weekId(), cag:START_CAG, lastEaten:{}, supersized:{}};
+    state = {name, calories:0, alltime:0, week:weekId(), cag:START_CAG, lastEaten:{}, supersized:{}, owned:{}};
     await save();
   }
   if(state.alltime===undefined) state.alltime=state.calories;
+  if(!state.owned) state.owned={};
+  if(state.sound===undefined) state.sound=true;
   rollWeek(); buildMenu(); render(); renderLB();
+  $('#toggleSound').textContent='Sound: '+(state.sound?'on':'off');
   setInterval(render, 1000);
   setInterval(renderLB, 30000);
 }
@@ -321,18 +334,19 @@ function buildMenu(){
           <h2>${f.name}</h2>
           <div class="serves mono" data-serves>Serves <b>${f.min}–${f.max}</b> cal</div>
         </div>
-        <div class="art">${f.icon}</div>
+        <div class="art"><span class="food">${f.icon}</span></div>
         <div class="bar"><i data-bar></i></div>
         <div class="status mono" data-status></div>
         <div class="lock" data-lock hidden><b>CAG NFT holders only</b><a href="${NFT_LINK}" target="_blank" rel="noopener">Get a CAG NFT →</a></div>
+        <button class="${f.buy?'buy':'eat'}" data-eat>${f.buy?`Buy · ${f.buy} $CAG`:'Eat'}</button>
         ${f.buy
-          ? `<button class="buy" data-eat>Buy &amp; eat · ${f.buy} $CAG</button><div class="nosuper">Can't be supersized</div>`
-          : `<button class="eat" data-eat>Eat</button><button class="super" data-super>↑ Supersize<small>-${f.cost} $CAG</small></button>`}
+          ? `<div class="nosuper">Can't be supersized</div>`
+          : `<button class="super" data-super>↑ Supersize<small>-${f.cost} $CAG</small></button>`}
       </div>
     </article>`).join('');
   FOODS.forEach(f=>{
     const el=$('#food-'+f.id);
-    el.querySelector('[data-eat]').onclick=()=>eat(f);
+    el.querySelector('[data-eat]').onclick=()=>{ if(f.buy && !state.owned[f.id]) buy(f); else eat(f); };
     const s=el.querySelector('[data-super]'); if(s) s.onclick=()=>supersize(f);
   });
 }
@@ -375,9 +389,19 @@ function render(){
     serves.classList.toggle('up', up);
     el.querySelector('[data-bar]').style.width = `${100*(1-rem/f.cooldown)}%`;
     setText(el.querySelector('[data-status]'), rem ? `Cooking · ${fmt(rem)}` : 'Fresh & ready!');
+    const owned = !!state.owned[f.id];
     const eatBtn=el.querySelector('[data-eat]');
-    eatBtn.disabled = rem>0 || (f.buy && state.cag < f.buy);
-    setHTML(eatBtn, rem ? 'Digesting…' : (f.buy ? `Buy &amp; eat · ${f.buy} $CAG` : 'Eat'));
+    if(eating[f.id]){
+      eatBtn.disabled=true; setHTML(eatBtn,'Nom nom…');
+    } else if(f.buy){
+      const buying = !owned && !rem;
+      eatBtn.classList.toggle('buy', buying); eatBtn.classList.toggle('eat', !buying);
+      eatBtn.disabled = rem>0 || (buying && state.cag < f.buy);
+      setHTML(eatBtn, rem ? 'Digesting…' : (owned ? 'Eat' : `Buy · ${f.buy} $CAG`));
+    } else {
+      eatBtn.disabled = rem>0;
+      setHTML(eatBtn, rem ? 'Digesting…' : 'Eat');
+    }
     const sBtn=el.querySelector('[data-super]');
     if(sBtn){
       sBtn.classList.toggle('done', up);
@@ -395,14 +419,17 @@ async function eat(f, skipOffer=false){
     if(choice==='super'){ await supersize(f); toast(`${f.name} supersized · now hit Eat!`); return; }
     if(choice!=='plain') return;
   }
-  if(f.buy){ if(state.cag < f.buy) return; state.cag -= f.buy; }
+  if(f.buy){ if(!state.owned[f.id]) return; state.owned[f.id]=false; }
   const up=!!state.supersized[f.id];
+  eating[f.id]=true; render();
+  await biteAnimation(f);
+  eating[f.id]=false;
   let gain = f.min + Math.floor(Math.random()*(f.max-f.min+1));
   if(up) gain*=SUPER_MULT;
   state.calories += gain; state.alltime += gain;
   state.lastEaten[f.id] = Date.now();
   state.supersized[f.id] = false;
-  fly(`+${gain}`); chomp();
+  fly(`+${gain}`);
   toast(`${f.icon} ${f.name} eaten · +${gain.toLocaleString()} cal`);
   render(); await save(); await pushScore(); renderLB();
 }
@@ -421,6 +448,13 @@ function offerSupersize(f){
     $('#upNo').onclick=()=>done('plain');
     dlg.oncancel=e=>{ e.preventDefault(); done('cancel'); };
   });
+}
+
+async function buy(f){
+  if(remaining(f)>0 || state.owned[f.id] || state.cag < f.buy) return;
+  state.cag -= f.buy; state.owned[f.id] = true;
+  toast(`${f.icon} ${f.name} bought · now hit Eat!`);
+  render(); await save();
 }
 
 async function supersize(f){
@@ -457,11 +491,32 @@ async function renderLB(){
 const esc = s => s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastT; function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 function fly(txt){ const el=document.createElement('div'); el.className='fly'; el.textContent=txt; $('#stage').appendChild(el); setTimeout(()=>el.remove(),1000); }
+let actx;
+function biteSound(){
+  if(!state.sound) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const dur=0.12, sr=actx.sampleRate, buf=actx.createBuffer(1, sr*dur, sr), data=buf.getChannelData(0);
+    for(let i=0;i<data.length;i++){ const t=i/data.length; data[i]=(Math.random()*2-1)*Math.pow(1-t,2.2)*(i<sr*0.01?i/(sr*0.01):1); }
+    const src=actx.createBufferSource(); src.buffer=buf;
+    const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.setValueAtTime(2600,actx.currentTime); lp.frequency.exponentialRampToValueAtTime(400,actx.currentTime+dur);
+    const g=actx.createGain(); g.gain.value=0.9;
+    src.connect(lp).connect(g).connect(actx.destination); src.start();
+  }catch(e){}
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function biteAnimation(f){
+  const food=$('#food-'+f.id+' .food'); if(!food) return;
+  for(const c of ['b1','b2','b3']){ food.className='food '+c+' shake'; biteSound(); chomp(); await sleep(420); }
+  food.className='food b3 gone'; await sleep(400);
+  food.className='food';
+}
 function chomp(){ const c=document.getElementById('cag'); c.classList.remove('chomp'); void c.offsetWidth; c.classList.add('chomp'); }
 
 $('#addCag').onclick=async()=>{ state.cag+=100; render(); await save(); toast('+100 $CAG (dev)'); };
 $('#toggleNft').onclick=async()=>{ state.nft=!state.nft; render(); await save(); toast(state.nft?'You now hold a CAG NFT (dev)':'CAG NFT removed (dev)'); };
-$('#reset').onclick=async()=>{ if(!confirm('Reset your calories, wallet and timers?')) return; state={...state, calories:0, alltime:0, cag:START_CAG, lastEaten:{}, supersized:{}}; render(); await save(); await pushScore(); renderLB(); };
+$('#toggleSound').onclick=async()=>{ state.sound=!state.sound; $('#toggleSound').textContent='Sound: '+(state.sound?'on':'off'); await save(); };
+$('#reset').onclick=async()=>{ if(!confirm('Reset your calories, wallet and timers?')) return; state={...state, calories:0, alltime:0, cag:START_CAG, lastEaten:{}, supersized:{}, owned:{}}; render(); await save(); await pushScore(); renderLB(); };
 init();
 </script>
 <script>
