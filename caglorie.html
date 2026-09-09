@@ -211,7 +211,7 @@ const FOODS = [
 const SUPER_MULT = 2;
 const LEVELS = [[0,'Peckish'],[500,'Snacking'],[2000,'Well fed'],[6000,'Bulking'],[15000,'Legendary']];
 const START_CAG = 200;
-const NFT_LINK = '#'; // marketplace link for CAG NFT (TODO)
+const NFT_LINK = 'https://marketplace.roninchain.com/collections/cag';
 const PRIZE_POOL = 100000;      // $CAG distributed every week (placeholder)
 const MIN_QUALIFY = 1000;       // weekly calories needed to get a share (placeholder)
 
@@ -228,6 +228,8 @@ const store = {
 
 let state = null;
 const $ = s => document.querySelector(s);
+const setText = (el,v) => { if(el.textContent!==v) el.textContent=v; };
+const setHTML = (el,v) => { if(el.innerHTML!==v) el.innerHTML=v; };
 
 async function init(){
   state = await store.get('player');
@@ -300,24 +302,24 @@ function render(){
 
   FOODS.forEach(f=>{
     const el=$('#food-'+f.id), rem=remaining(f), up=!!state.supersized[f.id];
-    const locked = f.nft && !state.nft;
+    const locked = !!(f.nft && !state.nft);
     el.classList.toggle('locked', locked);
     el.querySelector('[data-lock]').hidden = !locked;
     el.querySelector('[data-eat]').hidden = locked;
     const sb=el.querySelector('[data-super]'); if(sb) sb.hidden = locked;
     const serves=el.querySelector('[data-serves]');
-    serves.innerHTML = `Serves <b>${up?f.min*SUPER_MULT:f.min}–${up?f.max*SUPER_MULT:f.max}</b> cal${up?' ×2':''}`;
+    setHTML(serves, `Serves <b>${up?f.min*SUPER_MULT:f.min}–${up?f.max*SUPER_MULT:f.max}</b> cal${up?' ×2':''}`);
     serves.classList.toggle('up', up);
     el.querySelector('[data-bar]').style.width = `${100*(1-rem/f.cooldown)}%`;
-    el.querySelector('[data-status]').textContent = rem ? `Cooking · ${fmt(rem)}` : 'Fresh & ready!';
+    setText(el.querySelector('[data-status]'), rem ? `Cooking · ${fmt(rem)}` : 'Fresh & ready!');
     const eatBtn=el.querySelector('[data-eat]');
     eatBtn.disabled = rem>0 || (f.buy && state.cag < f.buy);
-    if(f.buy) eatBtn.innerHTML = rem ? 'Digesting…' : `Buy &amp; eat · ${f.buy} $CAG`;
+    setHTML(eatBtn, rem ? 'Digesting…' : (f.buy ? `Buy &amp; eat · ${f.buy} $CAG` : 'Eat'));
     const sBtn=el.querySelector('[data-super]');
     if(sBtn){
       sBtn.classList.toggle('done', up);
       sBtn.disabled = up || state.cag < f.cost;
-      sBtn.innerHTML = up ? `✓ Supersized<small>next serving ×${SUPER_MULT}</small>` : `↑ Supersize<small>-${f.cost} $CAG</small>`;
+      setHTML(sBtn, up ? `✓ Supersized<small>next serving ×${SUPER_MULT}</small>` : `↑ Supersize<small>-${f.cost} $CAG</small>`);
     }
   });
 }
