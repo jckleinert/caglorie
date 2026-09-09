@@ -18,7 +18,7 @@
   .mono{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.02em}
   .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 56px}
 
-  nav{position:sticky;top:0;z-index:10;background:var(--cream);border-bottom:var(--stroke)}
+  nav{position:-webkit-sticky;position:sticky;top:0;z-index:1000;background:var(--cream);border-bottom:var(--stroke);isolation:isolate;transform:translateZ(0);will-change:transform}
   nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px;padding:0 16px}
   nav .logo{height:40px;width:auto;display:block}
   @media(max-width:600px){.pill.nft{font-size:12px;padding-right:10px}}
