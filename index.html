@@ -31,8 +31,9 @@
   nav ul a:hover{color:var(--logo-pink)}
   @media(max-width:700px){nav ul{display:none}}
   .btn{display:inline-block;font:inherit;font-weight:700;border:var(--stroke);border-radius:999px;padding:12px 24px;cursor:pointer;
-       box-shadow:0 4px 0 var(--ink);background:var(--yellow);color:var(--ink);text-decoration:none;transition:transform .08s}
-  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+       box-shadow:0 4px 0 var(--ink);background:var(--yellow);color:var(--ink);text-decoration:none;transition:transform .12s ease,box-shadow .12s ease}
+  .btn:hover{transform:translateY(2px);box-shadow:0 2px 0 var(--ink)}
+  .btn:active{transform:translateY(4px);box-shadow:0 0 0 var(--ink)}
   .btn.sm{padding:9px 18px;font-size:15px}
   .btn.ghost{background:var(--paper)}
   .btn:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
