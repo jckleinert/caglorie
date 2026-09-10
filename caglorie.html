@@ -243,7 +243,7 @@
         <div class="info">
           <div class="who">Feeding <b id="pname">…</b></div>
           <div class="cal"><span id="cal">0</span> <small>calories this week</small></div>
-          <div class="who mono">All-time: <b id="alltime">0</b> cal</div>
+          <div class="who mono" id="rankline">Rank <b id="rank">–</b></div>
           <div class="level" id="level">Peckish</div>
         </div>
       </div>
@@ -405,11 +405,12 @@ function render(){
   if(!state) return;
   setText($('#pname'), state.name);
   setText($('#cal'), state.calories.toLocaleString());
-  setText($('#alltime'), state.alltime.toLocaleString());
   setText($('#cag'), state.cag.toLocaleString());
   setText($('#level'), levelFor(state.calories));
   setText($('#weeklabel'), 'Week of '+state.week);
   if(LB){
+    const m=LB.me;
+    setHTML($('#rankline'), m && m.rank ? `Rank <b>#${m.rank}</b> of ${LB.players} this week` : `Not ranked yet · eat something!`);
     const left=LB.weekEnd-now(), d=Math.floor(left/864e5), hh=Math.floor(left%864e5/36e5), mm=Math.floor(left%36e5/6e4);
     setText($('#countdown'), d ? `${d}d ${hh}h` : `${hh}h ${mm}m`);
     setText($('#pool'), LB.pool.toLocaleString()+' $CAG');
