@@ -1,117 +1,45 @@
-// CAGlorie game rules + storage. Everything the browser must not be trusted with lives here.
-import { Redis } from "@upstash/redis";
+// Single endpoint for the game. POST { id, action, ... } → { state, now, ... }
+import * as G from "../lib/game.js";
 
-export const redis = new Redis({
-  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+const ID_RE = /^[a-z0-9-]{8,64}$/;
 
-// ---- economy (edit here, the client only displays what the server sends) ----
-export const FOODS = {
-  snack: { id: "snack", name: "Snack",     cooldown: 1 * 3600e3,  min: 20,  max: 60,   cost: 30 },
-  meal:  { id: "meal",  name: "Meal",      cooldown: 6 * 3600e3,  min: 150, max: 400,  cost: 60,  nft: true },
-  big:   { id: "big",   name: "Big Order", cooldown: 12 * 3600e3, min: 500, max: 1200, cost: 100, nft: true },
-  choc:  { id: "choc",  name: "Chocolate", cooldown: 24 * 3600e3, min: 800, max: 2000, buy: 150 },
-};
-export const SUPER_MULT = 2;
-export const START_CAG = 200;
-export const NFT_PRICE = 5000;
-export const PRIZE_POOL = 100000;
-export const MIN_QUALIFY = 1000;
-export const DEV_TOOLS = process.env.DEV_TOOLS !== "off"; // set DEV_TOOLS=off in Vercel to disable cheats
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  try {
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { id, action } = body;
+    if (!ID_RE.test(id || "")) return res.status(400).json({ error: "Bad player id" });
 
-export function weekId(d = new Date()) {
-  const day = (d.getUTCDay() + 6) % 7;
-  const mon = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day));
-  return mon.toISOString().slice(0, 10);
-}
-export function weekEnd() { return new Date(weekId() + "T00:00:00Z").getTime() + 7 * 864e5; }
+    let p = await G.loadPlayer(id);
+    const out = { now: Date.now(), config: { foods: G.FOODS, superMult: G.SUPER_MULT, nftPrice: G.NFT_PRICE, dev: G.DEV_TOOLS } };
 
-const pkey = id => `player:${id}`;
-const lbkey = week => `lb:${week}`;
-const namekey = name => `name:${name.toLowerCase()}`;
-
-export async function loadPlayer(id) {
-  const p = await redis.get(pkey(id));
-  if (!p) return null;
-  const w = weekId();
-  if (p.week !== w) { p.week = w; p.calories = 0; }   // weekly reset
-  p.owned ||= {}; p.supersized ||= {}; p.lastEaten ||= {};
-  return p;
-}
-
-export async function savePlayer(p) {
-  await redis.set(pkey(p.id), p);
-  await redis.zadd(lbkey(p.week), { score: p.calories, member: p.name });
-}
-
-export async function createPlayer(id, name) {
-  name = String(name || "").trim().slice(0, 16);
-  if (!name) throw new Error("Name required");
-  const taken = await redis.get(namekey(name));
-  if (taken && taken !== id) throw new Error("That name is taken");
-  const p = { id, name, calories: 0, alltime: 0, week: weekId(), cag: START_CAG, nft: false, sound: true,
-              lastEaten: {}, supersized: {}, owned: {}, created: Date.now() };
-  await redis.set(namekey(name), id);
-  await savePlayer(p);
-  return p;
-}
-
-const remaining = (p, f) => { const t = p.lastEaten[f.id]; return t ? Math.max(0, t + f.cooldown - Date.now()) : 0; };
-
-export function eat(p, foodId) {
-  const f = FOODS[foodId]; if (!f) throw new Error("Unknown food");
-  if (remaining(p, f) > 0) throw new Error("Still digesting");
-  if (f.nft && !p.nft) throw new Error("CAG NFT holders only");
-  if (f.buy) { if (!p.owned[f.id]) throw new Error("Buy it first"); p.owned[f.id] = false; }
-  const up = !!p.supersized[f.id];
-  let gain = f.min + Math.floor(Math.random() * (f.max - f.min + 1));
-  if (up) gain *= SUPER_MULT;
-  p.calories += gain; p.alltime += gain;
-  p.lastEaten[f.id] = Date.now(); p.supersized[f.id] = false;
-  return gain;
-}
-
-export function supersize(p, foodId) {
-  const f = FOODS[foodId]; if (!f || !f.cost) throw new Error("Can't supersize that");
-  if (f.nft && !p.nft) throw new Error("CAG NFT holders only");
-  if (p.supersized[f.id]) throw new Error("Already large");
-  if (p.cag < f.cost) throw new Error("Not enough $CAG");
-  p.cag -= f.cost; p.supersized[f.id] = true;
-}
-
-export function buy(p, foodId) {
-  const f = FOODS[foodId]; if (!f || !f.buy) throw new Error("Can't buy that");
-  if (remaining(p, f) > 0) throw new Error("Still digesting");
-  if (p.owned[f.id]) throw new Error("Already bought");
-  if (p.cag < f.buy) throw new Error("Not enough $CAG");
-  p.cag -= f.buy; p.owned[f.id] = true;
-}
-
-export function buyNft(p) {
-  if (p.nft) throw new Error("Already a holder");
-  if (p.cag < NFT_PRICE) throw new Error("Not enough $CAG");
-  p.cag -= NFT_PRICE; p.nft = true;
-}
-
-export async function leaderboard(p) {
-  const week = weekId();
-  const raw = await redis.zrange(lbkey(week), 0, -1, { rev: true, withScores: true });
-  const rows = []; for (let i = 0; i < raw.length; i += 2) rows.push({ name: raw[i], calories: Number(raw[i + 1]) });
-  const qualified = rows.filter(r => r.calories >= MIN_QUALIFY);
-  const total = qualified.reduce((s, r) => s + r.calories, 0);
-  const payout = r => r.calories >= MIN_QUALIFY && total ? Math.floor(PRIZE_POOL * r.calories / total) : 0;
-  const top = rows.slice(0, 15).map((r, i) => ({ rank: i + 1, ...r, qualified: r.calories >= MIN_QUALIFY, payout: payout(r) }));
-  let me = null;
-  if (p) {
-    const idx = rows.findIndex(r => r.name === p.name);
-    me = { calories: p.calories, qualified: p.calories >= MIN_QUALIFY, payout: payout({ calories: p.calories }),
-           rank: p.calories > 0 && idx >= 0 ? idx + 1 : null };
+    switch (action) {
+      case "init":
+        if (!p) { if (!body.name) return res.status(200).json({ ...out, state: null }); p = await G.createPlayer(id, body.name); }
+        break;
+      case "leaderboard":
+        return res.status(200).json({ ...out, leaderboard: await G.leaderboard(p) });
+      case "eat":       need(p); out.gain = G.eat(p, body.food); break;
+      case "supersize": need(p); G.supersize(p, body.food); break;
+      case "buy":       need(p); G.buy(p, body.food); break;
+      case "buyNft":    need(p); G.buyNft(p); break;
+      case "sound":     need(p); p.sound = !!body.on; break;
+      // ---- dev cheats (disable with DEV_TOOLS=off) ----
+      case "devAddCag": need(p); dev(); p.cag += 100; break;
+      case "devZeroCag":need(p); dev(); p.cag = 0; break;
+      case "devNft":    need(p); dev(); p.nft = !p.nft; break;
+      case "devReset":  need(p); dev(); Object.assign(p, { calories: 0, alltime: 0, cag: G.START_CAG, nft: false, lastEaten: {}, supersized: {}, owned: {} }); break;
+      default: return res.status(400).json({ error: "Unknown action" });
+    }
+    await G.savePlayer(p);
+    out.state = G.publicState(p);
+    out.leaderboard = await G.leaderboard(p);
+    return res.status(200).json(out);
+  } catch (e) {
+    console.error("[api/game]", e);
+    return res.status(400).json({ error: e.message || "Error" });
   }
-  return { week, weekEnd: weekEnd(), pool: PRIZE_POOL, minQualify: MIN_QUALIFY, rows: top, me, players: rows.length };
 }
-
-export function publicState(p) {
-  return { id: p.id, name: p.name, calories: p.calories, alltime: p.alltime, week: p.week, cag: p.cag, nft: p.nft,
-           sound: p.sound, lastEaten: p.lastEaten, supersized: p.supersized, owned: p.owned };
-}
+function need(p) { if (!p) throw new Error("Player not found — reload the page"); }
+function dev() { if (!G.DEV_TOOLS) throw new Error("Dev tools are off"); }
