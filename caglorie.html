@@ -234,6 +234,15 @@
   .gtotal{color:#5b6172;margin-top:4px}
   .gtap{margin-top:14px;font-size:10px;color:#9a9a9a}
   @keyframes pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+  .menu{position:relative}
+  .menu .gate{display:none}
+  .menu.gated .card{filter:grayscale(1) brightness(.8);pointer-events:none;user-select:none}
+  .menu.gated .gate{display:grid;position:absolute;inset:0;place-items:center;padding:16px;z-index:5}
+  .gatebox{background:var(--paper);border:var(--stroke);border-radius:18px;box-shadow:6px 6px 0 var(--ink);max-width:340px;width:100%;overflow:hidden;text-align:center;position:sticky;top:90px}
+  .gatebox .stripe{height:26px;border-bottom:var(--stroke);background:repeating-linear-gradient(90deg,var(--logo-blue) 0 20px,var(--paper) 20px 40px)}
+  .gatebody{padding:18px 20px 22px}
+  .gatebody h2{margin:0 0 6px;font-size:22px}
+  .gatebody p{margin:0 0 14px;color:#5b6172}
 </style>
 </head>
 <body>
@@ -290,7 +299,7 @@
 
 <div class="toast" id="toast"></div>
 <div class="txov" id="txOverlay"><div class="txbox"><div class="stripe pink"></div><div class="txbody"><div class="spin"></div><h2 id="txTitle">Working…</h2><p class="mono" id="txSub">Confirm in Ronin Wallet…</p></div></div></div>
-<dialog id="gainDlg" class="gaindlg"><div class="stripe"></div><div class="gainbody"><div class="gicon" id="gainIcon">🍙</div><div class="gnum" id="gainNum">+0</div><div class="gcal mono">CALORIES</div><div class="gname" id="gainName"></div><div class="gtotal mono" id="gainTotal"></div><div class="gtap mono">tap to continue</div></div></dialog>
+<dialog id="gainDlg" class="gaindlg"><div class="stripe"></div><div class="gainbody"><div class="gicon" id="gainIcon">🍙</div><div class="gnum" id="gainNum">+0</div><div class="gcal mono">CALORIES</div><div class="gname" id="gainName"></div><div class="gtotal mono" id="gainTotal"></div><div class="gtap mono">tap anywhere to close</div></div></dialog>
 
 <dialog id="upDlg">
   <div class="stripe pink"></div>
@@ -485,7 +494,11 @@ function buildMenu(){
         ${f.buy ? `<div class="nosuper">Can't be supersized</div>`
                 : `<button class="super" data-super><span class="x2">×2</span><span class="txt">Make it large?<small>-${fmtCag(f.cost)} $CAG</small></span></button>`}
       </div>
-    </article>`).join('');
+    </article>`).join('') + `
+    <div class="gate" id="menuGate"><div class="gatebox"><div class="stripe"></div><div class="gatebody">
+      <h2>Connect your wallet</h2><p>Connect Ronin Wallet to feed CAG and join this week's leaderboard.</p>
+      <button class="eat" id="gateConnect">Connect Ronin Wallet</button></div></div></div>`;
+  $('#gateConnect').onclick=()=>connect(false);
   FOODS.forEach(f=>{
     const el=$('#food-'+f.id);
     el.querySelector('[data-eat]').onclick=async()=>{ if(!me && !(await connect())) return; if(f.buy && !state.owned[f.id]) buy(f); else eat(f); };
@@ -503,6 +516,7 @@ function levelFor(c){ let l=LEVELS[0][1]; for(const [min,name] of LEVELS) if(c>=
 function render(){
   const connected=!!me;
   $('#connectBtn').hidden=connected; $('#walletPill').hidden=!connected;
+  $('#menu').classList.toggle('gated', !connected);
   if(CFG){
     setText($('#weeklabel'), 'Week #'+CFG.week);
     const left=CFG.weekEnd-now(), d=Math.floor(left/864e5), hh=Math.floor(left%864e5/36e5), mm=Math.floor(left%36e5/6e4);
@@ -617,7 +631,6 @@ function showGain(f, gain, doubled, total){
     num.textContent='+'+Math.round(gain*e).toLocaleString(); if(p<1) requestAnimationFrame(tick); })(t0);
   const close=()=>{ if(dlg.open) dlg.close(); };
   dlg.onclick=close; dlg.oncancel=e=>{ e.preventDefault(); close(); };
-  setTimeout(close, 2800);
 }
 function askName(){
   const dlg=$('#nameDlg'); dlg.showModal();
