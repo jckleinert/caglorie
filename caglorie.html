@@ -214,6 +214,26 @@
   .pill.connect{cursor:pointer;font-family:inherit;background:var(--logo-pink);color:#fff;padding:7px 16px}
   .pill.connect:hover{filter:brightness(1.05)}
   .claim{margin-top:8px;width:100%;font-size:14px;padding:8px 10px}
+  .card.processing{filter:brightness(.55) saturate(.6);pointer-events:none;transition:filter .2s}
+  .txov{position:fixed;inset:0;background:rgba(30,30,40,.55);z-index:2000;display:none;place-items:center;padding:20px}
+  .txov.show{display:grid}
+  .txbox{background:var(--paper);border:var(--stroke);border-radius:18px;box-shadow:6px 6px 0 var(--ink);max-width:340px;width:100%;overflow:hidden;text-align:center}
+  .txbox .stripe{height:26px;border-bottom:var(--stroke);background:repeating-linear-gradient(90deg,var(--logo-pink) 0 20px,var(--paper) 20px 40px)}
+  .txbody{padding:22px 20px 24px}
+  .txbody h2{margin:12px 0 6px;font-size:22px}
+  .txbody p{margin:0;color:#5b6172}
+  .spin{width:44px;height:44px;margin:0 auto;border:4px solid var(--ink);border-top-color:var(--logo-blue);border-radius:50%;animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .gaindlg{text-align:center;cursor:pointer;max-width:360px}
+  .gaindlg .stripe{height:26px;border-bottom:var(--stroke);background:repeating-linear-gradient(90deg,var(--yellow) 0 20px,var(--paper) 20px 40px)}
+  .gainbody{padding:18px 20px 22px}
+  .gicon{font-size:64px;line-height:1;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+  .gnum{font-size:72px;font-weight:700;line-height:1;color:var(--logo-pink);margin-top:6px;text-shadow:4px 4px 0 var(--ink);-webkit-text-stroke:2px var(--ink);animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
+  .gcal{letter-spacing:.2em;color:#5b6172;margin-top:4px}
+  .gname{font-size:18px;font-weight:700;margin-top:12px}
+  .gtotal{color:#5b6172;margin-top:4px}
+  .gtap{margin-top:14px;font-size:10px;color:#9a9a9a}
+  @keyframes pop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 </style>
 </head>
 <body>
@@ -269,6 +289,8 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="txov" id="txOverlay"><div class="txbox"><div class="stripe pink"></div><div class="txbody"><div class="spin"></div><h2 id="txTitle">Working…</h2><p class="mono" id="txSub">Confirm in Ronin Wallet…</p></div></div></div>
+<dialog id="gainDlg" class="gaindlg"><div class="stripe"></div><div class="gainbody"><div class="gicon" id="gainIcon">🍙</div><div class="gnum" id="gainNum">+0</div><div class="gcal mono">CALORIES</div><div class="gname" id="gainName"></div><div class="gtotal mono" id="gainTotal"></div><div class="gtap mono">tap to continue</div></div></dialog>
 
 <dialog id="upDlg">
   <div class="stripe pink"></div>
@@ -321,7 +343,7 @@
 <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
 <script>
 // ================= CAGlorie client — talks to the CAGlorie contract on Ronin =================
-const CONTRACT  = '0xf9f60EDF7d3379Fdc1296c570135F5BA77D7bA14'; // <- paste the deployed CAGlorie address here
+const CONTRACT  = '0xf9f60EDF7d3379Fdc1296c570135F5BA77D7bA14';
 const CAG_TOKEN = '0x06f7481d937eb637d7d9deedf175957d5d881397';
 const NFT_LINK  = 'https://marketplace.roninchain.com/collections/cag';
 const RPC = 'https://api.roninchain.com/rpc', CHAIN_ID = 2020, CHAIN_HEX = '0x7e4';
@@ -358,11 +380,12 @@ function pickProvider(){
   if(injected[0]) return injected[0].provider;
   return window.ethereum||null;
 }
-async function connect(){
+async function connect(silent=false){
   const inj=pickProvider();
-  if(!inj){ toast('Install Ronin Wallet to play'); window.open('https://wallet.roninchain.com','_blank'); return false; }
+  if(!inj){ if(!silent){ toast('Install Ronin Wallet to play'); window.open('https://wallet.roninchain.com','_blank'); } return false; }
   try{
-    const accounts=await inj.request({method:'eth_requestAccounts'});
+    const accounts=await inj.request({method: silent?'eth_accounts':'eth_requestAccounts'});
+    if(!accounts||!accounts.length){ if(silent) localStorage.removeItem('caglorie_connected'); return false; }
     const cid=parseInt(await inj.request({method:'eth_chainId'}),16);
     if(cid!==CHAIN_ID){
       try{ await inj.request({method:'wallet_switchEthereumChain',params:[{chainId:CHAIN_HEX}]}); }
@@ -371,26 +394,34 @@ async function connect(){
     provider=new ethers.BrowserProvider(inj); signer=await provider.getSigner(); me=ethers.getAddress(accounts[0]);
     gameW=game.connect(signer); cagW=new ethers.Contract(CAG_TOKEN, ERC20_ABI, signer);
     inj.on?.('accountsChanged', ()=>location.reload()); inj.on?.('chainChanged', ()=>location.reload());
+    localStorage.setItem('caglorie_connected','1');
     await loadPlayer();
     if(!state.name) await askName();
     render(); renderLB();
     return true;
-  }catch(e){ toast(errMsg(e)); return false; }
+  }catch(e){ if(!silent) toast(errMsg(e)); return false; }
 }
 function errMsg(e){
   if(e?.code==='ACTION_REJECTED'||e?.code===4001) return 'Cancelled in wallet';
   return e?.reason||e?.shortMessage||e?.message||'Something went wrong';
 }
-async function sendTx(label, fn){
-  toast(`${label} · confirm in Ronin Wallet…`);
-  const tx=await fn();
-  toast(`${label} · cooking on-chain…`);
-  return await tx.wait();
+function busy(title, sub, card){
+  const o=$('#txOverlay'); $('#txTitle').textContent=title; $('#txSub').textContent=sub; o.classList.add('show');
+  if(card) card.classList.add('processing');
+}
+function idle(){ $('#txOverlay').classList.remove('show'); document.querySelectorAll('.card.processing').forEach(c=>c.classList.remove('processing')); }
+async function sendTx(label, fn, card){
+  busy(label, 'Confirm in Ronin Wallet…', card);
+  try{
+    const tx=await fn();
+    $('#txSub').textContent='Cooking on-chain… a few seconds';
+    return await tx.wait();
+  } finally { idle(); }
 }
 async function ensureAllowance(amount){
   const a=await cagW.allowance(me, CONTRACT);
   if(a>=amount) return;
-  await sendTx('Approve $CAG', ()=>cagW.approve(CONTRACT, ethers.MaxUint256));
+  await sendTx('Allowing $CAG payments (one time)', ()=>cagW.approve(CONTRACT, ethers.MaxUint256));
 }
 
 // ---------------- data ----------------
@@ -429,8 +460,9 @@ async function init(){
   $('#toggleSound').textContent='Sound: '+(sound?'on':'off');
   setInterval(render,1000);
   setInterval(refresh,30000);
-  $('#connectBtn').onclick=connect;
+  $('#connectBtn').onclick=()=>connect(false);
   $('#claimBtn').onclick=claimLast;
+  if(localStorage.getItem('caglorie_connected')){ await sleep(300); await connect(true); }
 }
 
 // ---------------- menu ----------------
@@ -536,11 +568,13 @@ async function eat(f, skipOffer=false){
   }
   eating[f.id]=true; render();
   try{
-    const [rc]=await Promise.all([sendTx(`Eat ${f.name}`, ()=>gameW.feed(f.idx)), biteAnimation(f)]);
+    const rc=await sendTx(`Eating ${f.name}`, ()=>gameW.feed(f.idx), $('#food-'+f.id));
     const log=rc.logs.map(l=>{ try{ return game.interface.parseLog(l); }catch{ return null; } }).find(l=>l&&l.name==='Fed');
     const gain=log?Number(log.args.cal):0;
     eating[f.id]=false;
-    fly(`+${gain}`); toast(`${ICONS[f.id]} ${f.name} eaten · +${gain.toLocaleString()} cal`);
+    biteSound(); chomp(); fly(`+${gain}`);
+    const doubled=!!(log&&log.args.doubled), total=log?Number(log.args.weekTotal):state.calories+gain;
+    showGain(f, gain, doubled, total);
     await refresh();
   }catch(e){ eating[f.id]=false; render(); toast(errMsg(e)); }
 }
@@ -549,7 +583,7 @@ async function supersize(f){
   if(state.cag<f.cost){ await noCagDialog(f); return; }
   try{
     await ensureAllowance(f.cost);
-    await sendTx(`Supersize ${f.name}`, ()=>gameW.supersize(f.idx));
+    await sendTx(`Supersizing ${f.name}`, ()=>gameW.supersize(f.idx), $('#food-'+f.id));
     toast(`${f.name} supersized · now hit Eat!`); await refresh();
   }catch(e){ toast(errMsg(e)); }
 }
@@ -558,26 +592,40 @@ async function buy(f){
   if(state.cag<f.buy){ await noCagDialog(f); return; }
   try{
     await ensureAllowance(f.buy);
-    await sendTx(`Buy ${f.name}`, ()=>gameW.buyChocolate());
+    await sendTx(`Buying ${f.name}`, ()=>gameW.buyChocolate(), $('#food-'+f.id));
     toast(`${ICONS[f.id]} ${f.name} bought · now hit Eat!`); await refresh();
   }catch(e){ toast(errMsg(e)); }
 }
 async function claimLast(){
   if(!me || !(state.claimable>0n)) return;
   try{
-    await sendTx('Claim prize', ()=>gameW.claim(CFG.week-1));
+    await sendTx('Claiming your prize', ()=>gameW.claim(CFG.week-1));
     toast(`🎉 ${fmtCag(state.claimable)} $CAG claimed`); await refresh();
   }catch(e){ toast(errMsg(e)); }
 }
 
 // ---------------- dialogs ----------------
+function showGain(f, gain, doubled, total){
+  const dlg=$('#gainDlg');
+  $('#gainIcon').textContent=ICONS[f.id];
+  $('#gainName').textContent=`${f.name} eaten`+(doubled?' · SUPERSIZED ×2':'');
+  $('#gainTotal').textContent=`${total.toLocaleString()} calories this week`;
+  const num=$('#gainNum'); num.textContent='+0';
+  dlg.showModal();
+  const t0=performance.now(), dur=900;
+  (function tick(t){ const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+    num.textContent='+'+Math.round(gain*e).toLocaleString(); if(p<1) requestAnimationFrame(tick); })(t0);
+  const close=()=>{ if(dlg.open) dlg.close(); };
+  dlg.onclick=close; dlg.oncancel=e=>{ e.preventDefault(); close(); };
+  setTimeout(close, 2800);
+}
 function askName(){
   const dlg=$('#nameDlg'); dlg.showModal();
   return new Promise(res=>{
     const done=()=>{ dlg.close(); res(); };
     $('#nameOk').onclick=async()=>{
       const n=$('#nameInput').value.trim(); if(!n) return;
-      try{ await sendTx('Set name', ()=>gameW.setName(n)); await loadPlayer(); done(); }catch(e){ toast(errMsg(e)); }
+      try{ await sendTx('Saving your name', ()=>gameW.setName(n)); await loadPlayer(); done(); }catch(e){ toast(errMsg(e)); }
     };
     $('#nameSkip').onclick=done; dlg.oncancel=e=>{ e.preventDefault(); done(); };
   });
@@ -651,15 +699,6 @@ function biteSound(){
   }catch(e){}
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function biteAnimation(f){
-  const food=$('#food-'+f.id+' .food'); if(!food) return;
-  // keep chewing until the transaction is mined
-  while(eating[f.id]){
-    for(const c of ['b1','b2','b3']){ food.className='food '+c+' shake'; biteSound(); chomp(); await sleep(420); }
-    food.className='food b3 gone'; await sleep(400);
-  }
-  food.className='food';
-}
 $('#toggleSound').onclick=()=>{ sound=!sound; localStorage.setItem('caglorie_sound', sound?'on':'off'); $('#toggleSound').textContent='Sound: '+(sound?'on':'off'); };
 
 init();
