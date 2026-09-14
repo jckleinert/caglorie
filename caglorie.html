@@ -79,8 +79,8 @@
     .stage{height:220px;border-right:0;border-bottom:var(--stroke)}
     .hero .info{align-items:center;text-align:center;padding:16px 18px 20px}
   }
-  #cag{position:relative;width:200px;transform-origin:bottom center;transition:transform .5s cubic-bezier(.34,1.56,.64,1);filter:drop-shadow(0 6px 0 rgba(27,34,51,.15))}
-  #cag.chomp{animation:chomp .35s}
+  #cagimg{position:relative;width:200px;transform-origin:bottom center;transition:transform .5s cubic-bezier(.34,1.56,.64,1);filter:drop-shadow(0 6px 0 rgba(27,34,51,.15))}
+  #cagimg.chomp{animation:chomp .35s}
   @keyframes chomp{40%{transform:var(--s) translateY(-14px) rotate(-3deg)}}
   .fly{position:absolute;left:50%;top:30%;transform:translateX(-50%);font-weight:700;font-size:30px;color:var(--logo-pink);
        -webkit-text-stroke:1px var(--ink);pointer-events:none;animation:fly 1s forwards}
@@ -243,6 +243,12 @@
   .gatebody{padding:18px 20px 22px}
   .gatebody h2{margin:0 0 6px;font-size:22px}
   .gatebody p{margin:0 0 14px;color:#5b6172}
+  .lb li.gap{display:block;text-align:center;color:#9a9a9a;padding:2px 0;border-bottom:0;letter-spacing:.3em}
+  .lb li.pinned{background:#fff6e0;border:2px solid var(--yellow);border-radius:12px;padding:9px 10px;margin-top:2px}
+  .you{font-size:10px;background:var(--logo-pink);color:#fff;border-radius:999px;padding:1px 7px;margin-left:8px;letter-spacing:.1em}
+  .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;color:#5b6172}
+  .pager .pgbtn{width:auto;padding:6px 12px;font-size:13px}
+  .pager .pgbtn:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
@@ -291,6 +297,7 @@
       <div class="head"><h2>This week's leaderboard</h2><span class="mono" id="weeklabel"></span></div>
       <div class="cols mono"><span>Player</span><span class="r">Calories</span><span class="r">Est. payout</span></div>
       <ol id="lb"><li class="empty">Loading…</li></ol>
+      <div class="pager" id="lbPager" hidden></div>
     </div>
   </section>
 
@@ -671,17 +678,37 @@ function offerSupersize(f){
 }
 
 // ---------------- leaderboard ----------------
+const LB_PAGE=10; let lbPage=0;
+function lbRow(r, pinned=false){
+  const isMe=me&&r.addr.toLowerCase()===me.toLowerCase();
+  return `<li class="${isMe?'me':''} ${r.qualified?'':'unq'} ${pinned?'pinned':''}" title="${r.addr}">
+      <span class="l"><span class="rank r${r.rank}">${r.rank}</span>${esc(r.name)}${isMe?'<span class="you mono">YOU</span>':''}${r.qualified?'':'<span class="qual no">not yet</span>'}</span>
+      <span class="mono r">${r.calories.toLocaleString()}</span>
+      <span class="mono r pay">${r.qualified?r.payout.toLocaleString()+' $CAG':'—'}</span>
+    </li>`;
+}
 function renderLB(){
   if(!LB) return;
   const m=LB.me;
   setText($('#myshare'), m.payout.toLocaleString()+' $CAG');
   setHTML($('#mysub'), !me ? 'Connect to play' : m.qualified ? `Qualified <span class="qual ok">✓</span>` : `${Math.max(0,LB.minQualify-m.calories).toLocaleString()} cal to qualify`);
-  setHTML($('#lb'), LB.rows.length ? LB.rows.map(r=>`
-    <li class="${me&&r.addr.toLowerCase()===me.toLowerCase()?'me':''} ${r.qualified?'':'unq'}" title="${r.addr}">
-      <span class="l"><span class="rank r${r.rank}">${r.rank}</span>${esc(r.name)}${r.qualified?'':'<span class="qual no">not yet</span>'}</span>
-      <span class="mono r">${r.calories.toLocaleString()}</span>
-      <span class="mono r pay">${r.qualified?r.payout.toLocaleString()+' $CAG':'—'}</span>
-    </li>`).join('') : '<li class="empty">Nobody has fed CAG this week. Be the first.</li>');
+  const rows=LB.rows, pages=Math.max(1,Math.ceil(rows.length/LB_PAGE));
+  lbPage=Math.min(lbPage,pages-1);
+  const from=lbPage*LB_PAGE, slice=rows.slice(from,from+LB_PAGE);
+  const mine=me?rows.find(r=>r.addr.toLowerCase()===me.toLowerCase()):null;
+  const meVisible=mine&&slice.includes(mine);
+  let html=slice.map(r=>lbRow(r)).join('');
+  if(mine&&!meVisible) html+=`<li class="gap mono">···</li>`+lbRow(mine,true);
+  if(me&&!mine) html+=`<li class="gap mono">···</li><li class="me pinned"><span class="l"><span class="rank">–</span>${esc(state?.name||short(me))}<span class="you mono">YOU</span></span><span class="mono r">0</span><span class="mono r pay">Not ranked · eat something!</span></li>`;
+  setHTML($('#lb'), rows.length ? html : '<li class="empty">Nobody has fed CAG this week. Be the first.</li>');
+  const pg=$('#lbPager');
+  if(rows.length>LB_PAGE){
+    pg.hidden=false;
+    setHTML(pg, `<button class="ghost pgbtn" id="pgPrev" ${lbPage===0?'disabled':''}>‹ Prev</button>
+      <span class="mono">${from+1}–${Math.min(from+LB_PAGE,rows.length)} of ${rows.length} players</span>
+      <button class="ghost pgbtn" id="pgNext" ${lbPage>=pages-1?'disabled':''}>Next ›</button>`);
+    $('#pgPrev').onclick=()=>{ lbPage--; renderLB(); }; $('#pgNext').onclick=()=>{ lbPage++; renderLB(); };
+  } else pg.hidden=true;
 }
 
 // ---------------- fx ----------------
