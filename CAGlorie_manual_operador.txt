@@ -9,8 +9,8 @@ Token $CAG ................ 0x06f7481d937eb637d7d9deedf175957d5d881397
 Colección CAG NFT ......... 0xf072Ceee77eBF455c72d9aeCF91Fb23f3fB6CC52
 Wallet tesorera (cobros) .. 0x105014c93504dC1a4ba78F93a6EcE7Cc94C863A4
 Wallet OWNER (MetaMask) ... 0x379c3894037334b01ad00547fBFdC59c8CAf632B
-Contrato CAGlorie ......... 0xf9f60EDF7d3379Fdc1296c570135F5BA77D7bA14  (actual)
-                            ______________________________________  (deploy final, completar)
+Contrato CAGlorie ......... 0x9C9136C2003315f937e11aeFBe6A98c8Ca8cA525  (OFICIAL, deploy final 15 sep 2026)
+Contrato anterior ......... 0xf9f60EDF7d3379Fdc1296c570135F5BA77D7bA14  (abandonado, sin setCooldowns/baneo)
 Contrato de prueba ........ 0x2750E26b95b4f4BeB82FBE21a4ECb5B1B5C86F4D  (semanas de 30 min)
 
 Solo la wallet OWNER puede usar las funciones de administración.
@@ -157,11 +157,9 @@ setEconomy  (todos los campos a la vez; poner también los que no
 
 setCooldowns  (en segundos: Snack, Meal, Big Order, Chocolate)
    [3600,21600,43200,43200]  = 1h, 6h, 12h, 12h
-   (disponible desde el deploy final)
 
 setClaimWeeks
    _claimWeeks = 1   (semanas que tienen los jugadores para reclamar)
-   (disponible desde el deploy final)
 
 setAddresses
    _treasury = wallet que recibe supersize y chocolate
