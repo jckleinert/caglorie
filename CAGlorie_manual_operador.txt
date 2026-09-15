@@ -1,0 +1,236 @@
+=====================================================================
+CAGlorie — MANUAL DEL OPERADOR (contrato en Ronin)
+=====================================================================
+Actualizado: 15 sep 2026
+
+DIRECCIONES
+-----------
+Token $CAG ................ 0x06f7481d937eb637d7d9deedf175957d5d881397
+Colección CAG NFT ......... 0xf072Ceee77eBF455c72d9aeCF91Fb23f3fB6CC52
+Wallet tesorera (cobros) .. 0x105014c93504dC1a4ba78F93a6EcE7Cc94C863A4
+Wallet OWNER (MetaMask) ... 0x379c3894037334b01ad00547fBFdC59c8CAf632B
+Contrato CAGlorie ......... 0xf9f60EDF7d3379Fdc1296c570135F5BA77D7bA14  (actual)
+                            ______________________________________  (deploy final, completar)
+Contrato de prueba ........ 0x2750E26b95b4f4BeB82FBE21a4ECb5B1B5C86F4D  (semanas de 30 min)
+
+Solo la wallet OWNER puede usar las funciones de administración.
+Es la cuenta de MetaMask con la que se hizo el deploy.
+
+
+CÓMO ABRIR EL CONTRATO EN REMIX (cada vez)
+------------------------------------------
+1. remix.ethereum.org → workspace "CAGlorie".
+2. Ícono "S" (Solidity Compiler): compilar CAGlorie.sol
+   (EVM version: paris · Optimization: tildada).
+3. Ícono Deploy: Environment = "Browser Extension" → MetaMask.
+   Verificar que MetaMask esté en la red Ronin (chain 2020) y con la
+   cuenta OWNER seleccionada. Debe decir "Ronin Mainnet (2020)".
+4. Tocar la tarjeta de contrato y elegir "CAGlorie".
+5. Cargarlo por dirección ("At Address" / "Load contract at address"):
+   pegar la dirección del contrato → aparece "CAGlorie AT 0x…".
+6. En el desplegable "Select a function" están todas las funciones.
+   Azules = lectura (gratis, no abren MetaMask).
+   Naranjas = escritura (abren MetaMask, gastan gas en RON).
+
+Para hablar con el token $CAG (approve, balanceOf) se usa el archivo
+CagToken.sol: compilarlo, elegir "CagToken" y cargar por dirección
+0x06f7481d937eb637d7d9deedf175957d5d881397.
+
+
+NÚMEROS: SIEMPRE CON 18 CEROS
+-----------------------------
+Todos los montos de $CAG en Remix se escriben en "wei": el número
+seguido de 18 ceros. Remix NO tiene multiplicador.
+
+      100 $CAG =                 100000000000000000000
+    1.000 $CAG =                1000000000000000000000
+   10.000 $CAG =               10000000000000000000000
+1.000.000 $CAG =          1000000000000000000000000
+
+Las calorías y los segundos se escriben tal cual (2000, 3600).
+
+
+=====================================================================
+A. OPERACIÓN SEMANAL: FONDEAR EL POOL
+=====================================================================
+El premio de cada semana vive dentro del contrato. Se carga con
+fundPool. Conviene hacerlo durante la semana (o a más tardar el lunes
+en que cierra), porque los jugadores solo tienen la semana siguiente
+para reclamar.
+
+Paso 1 — Saber el número de semana
+   CAGlorie → currentWeek → Call.  Devuelve N.
+   (Las semanas van de lunes 00:00 UTC a lunes 00:00 UTC; la 0 fue la
+   del deploy.)
+
+Paso 2 — Dar permiso al contrato para tomar $CAG (solo cuando se agota)
+   CagToken → approve
+      spender = dirección del contrato CAGlorie
+      amount  = monto con 18 ceros
+   Transact → confirmar en MetaMask.
+   El permiso se va gastando con cada fundPool. Se puede aprobar un
+   monto grande una sola vez (ej. 12 millones = 12 semanas) y no
+   volver a hacerlo hasta que se acabe. No hay riesgo: solo el
+   contrato CAGlorie puede usarlo, y solo cuando vos llamás a fundPool.
+
+   Ver cuánto permiso queda:
+   CagToken → allowance (owner = wallet OWNER, spender = CAGlorie)
+
+Paso 3 — Cargar el pool
+   CAGlorie → fundPool
+      week   = N
+      amount = 1000000000000000000000000   (1.000.000 $CAG)
+   Transact → confirmar.
+   Se puede cargar en varias veces: fundPool suma.
+
+Ver el pool cargado de una semana:
+   CAGlorie → weekPool (week = N) → Call.
+
+Si sale "Gas estimation failed … OVERFLOW(17)":
+   falta permiso (paso 2) o la wallet OWNER no tiene ese $CAG.
+   Cancelar, revisar allowance y balanceOf, y repetir.
+
+
+=====================================================================
+B. RECUPERAR $CAG NO RECLAMADO
+=====================================================================
+Cada semana los jugadores que calificaron tienen la semana siguiente
+para reclamar desde la página ("Claim last week"). Lo que no se
+reclama queda en el contrato y el owner lo retira:
+
+   CAGlorie → recoverPool
+      week   = número de la semana ya cerrada
+      amount = monto con 18 ceros
+   Condiciones: la semana terminó Y (nadie calificó O ya pasó la
+   ventana de reclamo). Si todavía está en ventana, falla con
+   "pool still claimable".
+
+   Ver cuánto queda en una semana: weekPool(week) menos lo reclamado.
+   Ver el total de $CAG que tiene el contrato:
+   CagToken → balanceOf (account = dirección de CAGlorie).
+
+
+=====================================================================
+C. BANEAR A UN TRAMPOSO
+=====================================================================
+   CAGlorie → setBanned
+      player   = wallet del jugador (0x…)
+      isBanned = true
+   Transact → confirmar.
+
+Efecto inmediato:
+   - Sus calorías de la semana en curso se borran (queda en 0 y deja
+     de contar para el reparto; los demás reciben proporcionalmente
+     más).
+   - No puede comer, hacer supersize, comprar chocolate ni reclamar.
+   - Si tenía un premio pendiente de la semana anterior, no lo cobra;
+     ese $CAG queda en el pool y se recupera con recoverPool.
+   - Queda registrado en cadena (evento Banned).
+
+Para levantar el baneo: setBanned con isBanned = false.
+Arranca de cero en la semana en curso.
+
+Ver si una wallet está baneada: banned (player) → Call.
+
+Dónde ver qué hizo un jugador: en app.roninchain.com buscar la wallet
+o el contrato y mirar las transacciones; cada acción emite un evento
+(Fed, Supersized, ChocolateBought, Claimed).
+
+
+=====================================================================
+D. CAMBIAR REGLAS DEL JUEGO (sin redesplegar)
+=====================================================================
+La página lee estos valores del contrato al cargar, así que el cambio
+se ve solo. Recomendación: cambiar el mínimo de calorías solo al
+comienzo de una semana, no a mitad.
+
+setEconomy  (todos los campos a la vez; poner también los que no
+             cambian)
+   _calMin         = [20,150,500,800]
+   _calMax         = [60,400,1200,2000]
+   _supersizePrice = ["10000000000000000000","40000000000000000000","100000000000000000000"]
+                     (Snack 10, Meal 40, Big Order 100 $CAG)
+   _chocolatePrice = 150000000000000000000     (150 $CAG)
+   _minCalories    = 2000
+   _announcedPool  = 1000000000000000000000000 (lo que muestra la
+                     página cuando la semana todavía no está fondeada)
+
+setCooldowns  (en segundos: Snack, Meal, Big Order, Chocolate)
+   [3600,21600,43200,43200]  = 1h, 6h, 12h, 12h
+   (disponible desde el deploy final)
+
+setClaimWeeks
+   _claimWeeks = 1   (semanas que tienen los jugadores para reclamar)
+   (disponible desde el deploy final)
+
+setAddresses
+   _treasury = wallet que recibe supersize y chocolate
+   _nft      = colección NFT que habilita Meal y Big Order
+
+transferOwnership
+   newOwner = nueva wallet OWNER. ¡Irreversible! Verificar dos veces.
+
+NO cambiable sin redesplegar: qué comidas exigen NFT, duración de la
+semana (7 días, lunes 00:00 UTC).
+
+
+=====================================================================
+E. CONSULTAS ÚTILES (lectura, gratis)
+=====================================================================
+currentWeek()                       semana actual
+weekEndsAt(week)                    timestamp de cierre (unixtimestamp.com para convertir)
+weekPool(week)                      $CAG cargado en esa semana
+weekQualifiedCalories(week)         suma de calorías de los que califican
+playerCount(week)                   cantidad de wallets que comieron
+getLeaderboard(week)                wallets, calorías y nombres
+weekCalories(week, wallet)          calorías de una wallet en una semana
+claimable(wallet, week)             cuánto puede reclamar esa wallet
+getPlayer(wallet)                   estado completo de un jugador
+cooldownLeft(wallet, food)          segundos que le faltan (food 0-3)
+hasNft(wallet)                      si tiene CAG NFT
+names(wallet)                       nombre elegido
+banned(wallet)                      si está baneada
+getConfig()                         toda la configuración actual
+
+
+=====================================================================
+F. DEPLOY DE UNA VERSIÓN NUEVA (cuando haga falta)
+=====================================================================
+1. Remix → compilar CAGlorie.sol (paris + optimization).
+2. Deploy → Browser Extension → MetaMask en Ronin, cuenta OWNER.
+3. Elegir "CAGlorie", apagar "Verify Contract on Explorers", completar
+   el constructor:
+   _cag            0x06f7481d937eb637d7d9deedf175957d5d881397
+   _nft            0xf072Ceee77eBF455c72d9aeCF91Fb23f3fB6CC52
+   _treasury       0x105014c93504dC1a4ba78F93a6EcE7Cc94C863A4
+   _calMin         [20,150,500,800]
+   _calMax         [60,400,1200,2000]
+   _supersizePrice ["10000000000000000000","40000000000000000000","100000000000000000000"]
+   _chocolatePrice 150000000000000000000
+   _minCalories    2000
+   _announcedPool  1000000000000000000000000
+4. Deploy → confirmar → copiar la dirección "CAGLORIE AT 0x…".
+5. Pegar esa dirección en caglorie.html, en la línea
+   const CONTRACT  = '0x…';   (buscar "CONTRACT")
+   y volver a subir la página.
+6. Anotar la dirección nueva en este archivo.
+El contrato anterior queda abandonado; si tenía pool, retirarlo antes
+con recoverPool.
+
+
+=====================================================================
+G. ARCHIVOS
+=====================================================================
+CAGlorie.sol          contrato (versión para el deploy final)
+CAGlorie.abi.json     descripción de las funciones (para verificar o
+                      conectar otras herramientas)
+CagToken.sol          mini archivo para operar el token desde Remix
+CAGlorieTest.sol      variante de prueba con semanas de 30 minutos
+caglorie.html         el juego (embebe el ABI y la dirección)
+caglorie-test.html    el juego apuntando a un contrato de prueba:
+                      se abre como caglorie-test.html#0xDireccion
+index.html            landing (lee el pool y el mínimo del contrato)
+
+Sitio: https://caglorie.vercel.app
+Explorador Ronin: https://app.roninchain.com
+Red Ronin en MetaMask: RPC https://api.roninchain.com/rpc · chain 2020 · RON
