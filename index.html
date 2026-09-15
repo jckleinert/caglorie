@@ -182,6 +182,25 @@
     .stage img{width:min(70%,260px);margin-bottom:-30px}
     .stage .floor{left:10%;right:10%;bottom:-34px;height:calc(38% + 34px)}
   }
+  /* FAQ */
+  .faqwrap{max-width:720px}
+  .faqs{display:grid;gap:12px;margin-top:22px}
+  .faq{background:var(--cream);border:var(--stroke);border-radius:18px;box-shadow:var(--lift);overflow:hidden;transition:transform .15s}
+  .faq:hover{transform:translateY(-1px)}
+  .faq summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px;font-weight:700;font-size:17px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq .fic{flex:0 0 44px;height:44px;border:var(--stroke);border-radius:12px;background:var(--yellow);display:grid;place-items:center;font-size:22px}
+  .faq .fq{flex:1}
+  .faq .chev{flex:0 0 30px;height:30px;border:var(--stroke);border-radius:10px;background:var(--paper);position:relative;transition:transform .25s,background .2s}
+  .faq .chev::before,.faq .chev::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:3px;background:var(--ink);border-radius:2px;transform:translate(-50%,-50%)}
+  .faq .chev::after{transform:translate(-50%,-50%) rotate(90deg)}
+  .faq[open] .chev{transform:rotate(45deg);background:var(--logo-pink)}
+  .faq[open] .chev::before,.faq[open] .chev::after{background:#fff}
+  .faq[open] summary .fic{background:var(--logo-pink);color:#fff}
+  .faq .fa{padding:0 16px 16px 74px;color:#3b4250;line-height:1.55;animation:faqin .25s ease}
+  .faq .fa p{margin:0}
+  @keyframes faqin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @media(max-width:600px){.faq summary{font-size:15px;padding:12px 14px}.faq .fic{flex-basis:38px;height:38px;font-size:19px}.faq .fa{padding-left:14px}}
 </style>
 </head>
 <body>
@@ -194,6 +213,7 @@
       <li><a href="#prize">Weekly prize</a></li>
       <li><a href="#menu">Menu</a></li>
       <li><a href="#cag">$CAG</a></li>
+      <li><a href="#faq">FAQ</a></li>
     </ul>
     <a class="btn sm" href="caglorie.html">Play now</a>
   </div>
@@ -311,6 +331,34 @@
   </div>
 </section>
 
+<section id="faq" style="background:var(--paper);border-top:var(--stroke)">
+  <div class="wrap faqwrap">
+    <h2>FAQ</h2>
+    <p class="lead">The short version of what players ask us.</p>
+    <div class="faqs">
+      <details class="faq">
+        <summary><span class="fic">🎟️</span><span class="fq">Is it free to play?</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="fa"><p>Eating is free apart from Ronin gas, a fraction of a cent. Supersize and Chocolate cost $CAG, but you never need them to qualify.</p></div>
+      </details>
+      <details class="faq">
+        <summary><span class="fic">🦊</span><span class="fq">Why does my wallet pop up every time I eat?</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="fa"><p>Every action is a real Ronin transaction. Your calories and prize live on-chain, so nobody can edit them. It confirms in about two seconds.</p></div>
+      </details>
+      <details class="faq">
+        <summary><span class="fic">🖼️</span><span class="fq">Do I need a CAG NFT?</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="fa"><p>No. Snack and Chocolate are open to everyone. Meal and Big Order need at least one CAG NFT in your wallet.</p></div>
+      </details>
+      <details class="faq">
+        <summary><span class="fic">🍰</span><span class="fq">How is the prize split?</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="fa"><p>Everyone with 2,000+ calories shares the pool in proportion to what they ate: pool × your calories ÷ all qualified calories.</p></div>
+      </details>
+      <details class="faq">
+        <summary><span class="fic">🏆</span><span class="fq">When can I claim?</span><span class="chev" aria-hidden="true"></span></summary>
+        <div class="fa"><p>The week closes Monday 00:00 UTC. If you qualified and the pool is funded, a Claim button appears in the game. You have the following week to claim.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
 
 <footer>
   <div class="wrap">
