@@ -201,6 +201,10 @@
   .faq .fa p{margin:0}
   @keyframes faqin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
   @media(max-width:600px){.faq summary{font-size:15px;padding:12px 14px}.faq .fic{flex-basis:38px;height:38px;font-size:19px}.faq .fa{padding-left:14px}}
+  /* prize columns aligned */
+  #prize .split{align-items:stretch}
+  #prize .rules{grid-auto-rows:1fr;align-content:stretch}
+  #prize .rule{align-items:center}
 </style>
 </head>
 <body>
@@ -273,6 +277,7 @@
         <div class="rule"><div class="ic">🎯</div><div><b id="rule1">Reach 2,000 calories to qualify</b><span>Hit the weekly minimum and you're in for a share of the pool.</span></div></div>
         <div class="rule"><div class="ic">📊</div><div><b>Earn your share</b><span>The pool is split by calories. More feeding, bigger slice.</span></div></div>
         <div class="rule"><div class="ic">🔁</div><div><b>Fresh start every Monday</b><span>Weekly calories reset at 00:00 UTC.</span></div></div>
+        <div class="rule"><div class="ic">🏆</div><div><b>Claim within a week</b><span>Once the week closes, you have the following week to collect your $CAG in the game.</span></div></div>
       </div>
       <div class="card ex" style="--c:var(--yellow)"><div class="stripe"></div><div class="body">
         <h3>Example week · 100,000 $CAG pool</h3>
