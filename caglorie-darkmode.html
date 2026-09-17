@@ -294,14 +294,13 @@
   /* cards, bars, leaderboard */
   :root[data-theme="dark"] .bar{background:#0E1015}
   :root[data-theme="dark"] .lb .cols{border-bottom-color:var(--line)}
-  :root[data-theme="dark"] .lb li{border-bottom-color:var(--line)}
+  :root[data-theme="dark"] .lb li:not(.pinned){border-bottom-color:var(--line)}
   :root[data-theme="dark"] .rank{background:#2C323F}
   :root[data-theme="dark"] .rank.r1,:root[data-theme="dark"] .rank.r2,:root[data-theme="dark"] .rank.r3{color:var(--ink)}
   :root[data-theme="dark"] .rank.r1{background:var(--yellow)}
   :root[data-theme="dark"] .rank.r2{background:#dfe4ec}
   :root[data-theme="dark"] .rank.r3{background:#f0b98a}
   :root[data-theme="dark"] .lb li.pinned{background:#3A3116}
-  :root[data-theme="dark"] .lb li.pinned .rank{background:#4A3D18}
   :root[data-theme="dark"] .lock{border-color:var(--line)}
   /* buttons */
   :root[data-theme="dark"] button.ghost,:root[data-theme="dark"] .super{color:var(--text)}
