@@ -260,7 +260,90 @@
   #cagimg.swapin{animation:tierpop .45s cubic-bezier(.2,1.6,.4,1)}
   @keyframes tierpop{from{transform:scale(.7);opacity:.3}to{opacity:1}}
   #cagimg{width:auto;max-width:210px;max-height:88%;height:auto}
+
+  /* ================= DARK MODE ================= */
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --cream:#16181F;      /* page background */
+    --paper:#232833;      /* cards / panels */
+    --ink:#08090D;        /* outlines + hard shadows */
+    --text:#F2EEE3;       /* main text */
+    --dim:#A3ABBA;        /* secondary text */
+    --line:#343B49;       /* dividers */
+    --panel:#0D1015;      /* dark banners (prize pool, ticker) */
+  }
+  :root[data-theme="dark"] body{background:var(--cream);color:var(--text)}
+  /* nav */
+  :root[data-theme="dark"] .pill.nft{background:#2C323F;color:var(--dim)}
+  :root[data-theme="dark"] .pill.nft .dot{background:#5b6270}
+  :root[data-theme="dark"] .pill.nft.on{background:var(--yellow);color:var(--ink)}
+  :root[data-theme="dark"] .pill.nft.on .dot{background:var(--grass)}
+  /* secondary text */
+  :root[data-theme="dark"] .hero .who,:root[data-theme="dark"] .serves,:root[data-theme="dark"] .status,
+  :root[data-theme="dark"] .empty,:root[data-theme="dark"] .lock,:root[data-theme="dark"] .nosuper,
+  :root[data-theme="dark"] .lb .cols,:root[data-theme="dark"] .lb li.unq .pay,:root[data-theme="dark"] dialog p,
+  :root[data-theme="dark"] .unlock small,:root[data-theme="dark"] .dev,:root[data-theme="dark"] .txbody p,
+  :root[data-theme="dark"] .gcal,:root[data-theme="dark"] .gtotal,:root[data-theme="dark"] .gatebody p,
+  :root[data-theme="dark"] .pager{color:var(--dim)}
+  :root[data-theme="dark"] .hero .who b,:root[data-theme="dark"] .lock b,:root[data-theme="dark"] .super small{color:var(--text)}
+  :root[data-theme="dark"] .gtap,:root[data-theme="dark"] .lb li.gap{color:#6B7280}
+  :root[data-theme="dark"] .hero .level{color:var(--ink)}
+  /* dark banners */
+  :root[data-theme="dark"] .prize{background:var(--panel)}
+  :root[data-theme="dark"] .toast{background:var(--panel);color:var(--text)}
+  /* cards, bars, leaderboard */
+  :root[data-theme="dark"] .bar{background:#0E1015}
+  :root[data-theme="dark"] .lb .cols{border-bottom-color:var(--line)}
+  :root[data-theme="dark"] .lb li:not(.pinned){border-bottom-color:var(--line)}
+  :root[data-theme="dark"] .rank{background:#2C323F}
+  :root[data-theme="dark"] .rank.r1,:root[data-theme="dark"] .rank.r2,:root[data-theme="dark"] .rank.r3{color:var(--ink)}
+  :root[data-theme="dark"] .rank.r1{background:var(--yellow)}
+  :root[data-theme="dark"] .rank.r2{background:#dfe4ec}
+  :root[data-theme="dark"] .rank.r3{background:#f0b98a}
+  :root[data-theme="dark"] .lb li.pinned{background:#3A3116}
+  :root[data-theme="dark"] .lock{border-color:var(--line)}
+  /* buttons */
+  :root[data-theme="dark"] button.ghost,:root[data-theme="dark"] .super{color:var(--text)}
+  :root[data-theme="dark"] .super .x2{color:var(--ink)}
+  :root[data-theme="dark"] .super.done{background:#1B1F28}
+  :root[data-theme="dark"] .super.done .x2{background:var(--grass);color:#fff}
+  :root[data-theme="dark"] .eat:disabled{background:#3A3521;color:#8F8460;border-color:#8F8460;box-shadow:0 4px 0 #8F8460}
+  :root[data-theme="dark"] button.buy:disabled{background:#452A31;color:#A57B86;border-color:#A57B86;box-shadow:0 4px 0 #A57B86}
+  :root[data-theme="dark"] .super:disabled:not(.done){background:#262A33;color:#8A92A0;border-color:#8A92A0;box-shadow:0 4px 0 #8A92A0}
+  :root[data-theme="dark"] .super:disabled:not(.done) .x2{background:#333945;border-color:#8A92A0;color:#8A92A0}
+  :root[data-theme="dark"] .dev #toggleSound{color:var(--dim);border-color:var(--dim)}
+  /* overlays, dialogs, art */
+  :root[data-theme="dark"] dialog::backdrop{background:rgba(0,0,0,.72)}
+  :root[data-theme="dark"] .txov{background:rgba(0,0,0,.66)}
+  :root[data-theme="dark"] dialog input{background:var(--cream);color:var(--text)}
+  :root[data-theme="dark"] #cagimg{filter:drop-shadow(0 6px 0 rgba(0,0,0,.45))}
+
+  /* ---------- dark mode toggle ---------- */
+  .themetoggle{position:relative;flex:0 0 auto;width:62px;height:34px;padding:0;border:var(--stroke);border-radius:999px;
+    background:var(--paper);box-shadow:0 3px 0 var(--ink);cursor:pointer;-webkit-appearance:none;appearance:none;
+    transition:background .25s ease,transform .12s ease,box-shadow .12s ease}
+  .themetoggle:hover:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+  .themetoggle:active:not(:disabled){transform:translateY(3px);box-shadow:0 0 0 var(--ink)}
+  .themetoggle:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .themetoggle .tt-track{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;pointer-events:none}
+  .themetoggle .tt-track svg{width:14px;height:14px;color:var(--ink);opacity:.35}
+  .themetoggle .tt-knob{position:absolute;top:1px;left:1px;width:26px;height:26px;border:2px solid var(--ink);border-radius:50%;
+    background:var(--yellow);display:grid;place-items:center;
+    transition:transform .28s cubic-bezier(.34,1.4,.64,1),background .25s ease}
+  .themetoggle .tt-knob svg{width:14px;height:14px;color:var(--ink)}
+  .themetoggle .tt-knob .ic-moon{display:none}
+  :root[data-theme="dark"] .themetoggle{background:#0E1015}
+  :root[data-theme="dark"] .themetoggle .tt-track svg{color:#F2EEE3;opacity:.3}
+  :root[data-theme="dark"] .themetoggle .tt-knob{transform:translateX(28px);background:#F4F0E4}
+  :root[data-theme="dark"] .themetoggle .tt-knob .ic-sun{display:none}
+  :root[data-theme="dark"] .themetoggle .tt-knob .ic-moon{display:block;color:#13151B}
+  .dev{display:flex;align-items:center;justify-content:center;gap:12px}
+  .dev .themetoggle{width:62px;height:34px;padding:0;margin:0;border-width:3px;background:var(--paper);box-shadow:0 3px 0 var(--ink)}
+  :root[data-theme="dark"] .dev .themetoggle{background:#0E1015}
 </style>
+<script>
+(function(){try{if(localStorage.getItem('caglorie_theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
+</script>
 </head>
 <body>
 <nav>
@@ -312,7 +395,17 @@
     </div>
   </section>
 
-  <div class="dev"><button id="toggleSound">Sound: on</button></div>
+  <div class="dev"><button id="toggleSound">Sound: on</button>
+      <button class="themetoggle" id="themeBtn" type="button" role="switch" aria-checked="false" aria-label="Dark mode" title="Switch to dark mode">
+        <span class="tt-track" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.4 5.4l1.4 1.4M17.2 17.2l1.4 1.4M18.6 5.4l-1.4 1.4M6.8 17.2l-1.4 1.4"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a8.6 8.6 0 1 0 11 11z"/></svg>
+        </span>
+        <span class="tt-knob" aria-hidden="true">
+          <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.4 5.4l1.4 1.4M17.2 17.2l1.4 1.4M18.6 5.4l-1.4 1.4M6.8 17.2l-1.4 1.4"/></svg>
+          <svg class="ic-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a8.6 8.6 0 1 0 11 11z"/></svg>
+        </span>
+      </button></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -777,6 +870,19 @@ init();
 (function(){const n=document.querySelector('nav');let last=0;
 function onScroll(){const y=window.scrollY;if(window.innerWidth<=760){n.classList.toggle('shrunk', y>40);}else n.classList.remove('shrunk');}
 window.addEventListener('scroll',onScroll,{passive:true});window.addEventListener('resize',onScroll);onScroll();})();
+</script>
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  function apply(dark,save){
+    if(dark) root.setAttribute('data-theme','dark'); else root.removeAttribute('data-theme');
+    if(btn){ btn.setAttribute('aria-checked',dark?'true':'false');
+             btn.title=dark?'Switch to light mode':'Switch to dark mode'; }
+    if(save){ try{ localStorage.setItem('caglorie_theme',dark?'dark':'light'); }catch(e){} }
+  }
+  apply(root.getAttribute('data-theme')==='dark',false);
+  if(btn) btn.addEventListener('click',function(){ apply(root.getAttribute('data-theme')!=='dark',true); });
+})();
 </script>
 </body>
 </html>
