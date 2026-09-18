@@ -365,7 +365,7 @@
   .card.collab.drink{margin-top:14px}
   .card.collab.drink .cstripe{background:repeating-linear-gradient(-45deg,var(--logo-blue) 0 14px,var(--paper) 14px 28px)}
   .card.collab .badge.drink{background:var(--logo-blue);color:var(--ink);position:static;font-size:11px;letter-spacing:.08em}
-  .card.collab.drink .cart{overflow:hidden;padding:0}
+  .card.collab.drink .cart{overflow:hidden;padding:6px;background:var(--yellow)}
   .card.collab.drink .cact .nosuper{padding:4px 0 0}
 </style>
 <script>
@@ -759,7 +759,10 @@ async function loadDrinksConfig(){
       if(!d.enabled) return null;
       const meta = await loadDrinkMeta(id);
       return { id, min:Number(d.cMin), max:Number(d.cMax), cooldown:Number(d.cooldown)*1000,
-               name: meta.name || `Drink #${id}`, image: meta.image || null };
+               name: meta.name || `Drink #${id}`,
+               // "game_image" es la version simple para el menu del juego.
+               // Si no esta, cae en la imagen del NFT.
+               image: meta.game_image || meta.image || null };
     }));
     DRINKS = rows.filter(Boolean);
   }catch(e){ console.warn('drinks config', e); DRINKS = []; }
@@ -791,7 +794,7 @@ async function loadDrinkPlayer(){
 }
 
 function drinkArtHTML(d){
-  return d.image ? `<img src="${esc(d.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:13px">` : '🥤';
+  return d.image ? `<img src="${esc(d.image)}" alt="" style="width:100%;height:100%;object-fit:contain">` : '🥤';
 }
 
 function buildDrinks(){
@@ -863,7 +866,7 @@ async function drinkNow(id){
     eating[key] = false;
     biteSound(); chomp(); fly(`+${gain}`);
     const total = log ? Number(log.args.weekTotal) : state.calories + gain;
-    showGain({id:'drink', name:d.name}, gain, false, total);
+    showGain({id:'drink', name:d.name, verb:'drunk'}, gain, false, total);
     await refresh();
   }catch(e){ eating[key] = false; render(); toast(errMsg(e)); }
 }
@@ -1015,7 +1018,7 @@ async function claimLast(){
 function showGain(f, gain, doubled, total){
   const dlg=$('#gainDlg');
   $('#gainIcon').textContent=ICONS[f.id];
-  $('#gainName').textContent=`${f.name} eaten`+(doubled?' · SUPERSIZED ×2':'');
+  $('#gainName').textContent=`${f.name} ${f.verb || 'eaten'}`+(doubled?' · SUPERSIZED ×2':'');
   $('#gainTotal').textContent=`${total.toLocaleString()} calories this week`;
   const num=$('#gainNum'); num.textContent='+0';
   dlg.showModal();
