@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAGlorie · Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
+<style>
+:root{--ink:#1b2233;--paper:#fff;--cream:#fff7e6;--yellow:#ffc933;--pink:#ff4f8b;--blue:#4aa8ff;--green:#5fc26e;--stroke:2.5px solid var(--ink);--lift:0 5px 0 var(--ink)}
+*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:22px 16px 60px}
+h1{margin:0;font-size:26px}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.net{font-size:11px;letter-spacing:.08em;padding:3px 10px;border-radius:999px;border:2px solid var(--ink);background:var(--yellow)}
+.net.test{background:var(--blue);color:#fff}
+input,select,button{font:inherit;border:var(--stroke);border-radius:12px;padding:9px 12px;background:var(--paper);color:inherit}
+button{cursor:pointer;box-shadow:0 3px 0 var(--ink);font-weight:700}button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+button.p{background:var(--yellow)}button.d{background:var(--pink);color:#fff}button:disabled{opacity:.45;cursor:default}
+button.sm{padding:6px 10px;font-size:13px;box-shadow:0 2px 0 var(--ink)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.muted{color:#5b6172;font-size:13px}
+#msg{margin:12px 0;color:#5b6172;min-height:20px}
+
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 14px;border-bottom:var(--stroke);padding-bottom:12px}
+.tabs button{background:var(--paper);box-shadow:0 3px 0 var(--ink)}
+.tabs button.on{background:var(--ink);color:var(--cream)}
+.tab{display:none}.tab.on{display:block}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:0 0 18px}
+.card{background:var(--paper);border:var(--stroke);border-radius:14px;padding:12px 14px;box-shadow:var(--lift)}
+.card .k{font-size:11px;letter-spacing:.08em;color:#5b6172}.card .v{font-size:20px;font-weight:700;margin-top:2px}
+.panel{background:var(--paper);border:var(--stroke);border-radius:14px;padding:16px;box-shadow:var(--lift);margin-bottom:14px}
+.panel h3{margin:0 0 4px;font-size:17px}
+.panel .sub{color:#5b6172;font-size:13px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.row + .row{margin-top:10px;padding-top:10px;border-top:1.5px solid #e6e1d6}
+.row label{font-size:13px;color:#5b6172}
+.actions{display:flex;gap:10px;align-items:center;margin-top:14px;padding-top:14px;border-top:1.5px solid #e6e1d6}
+.chg{color:#b8860b;font-size:13px;font-weight:700}
+
+table{width:100%;border-collapse:collapse;background:var(--paper);border:var(--stroke);border-radius:14px;overflow:hidden;box-shadow:var(--lift)}
+th,td{padding:9px 10px;border-bottom:1.5px solid #e6e1d6;text-align:left;font-size:14px;vertical-align:middle}
+th{background:#f3eee2;font-size:12px;letter-spacing:.06em}
+td.r,th.r{text-align:right}tr.unq td{color:#9a9a9a}tr.ban td{color:#c33;text-decoration:line-through}
+table input{padding:6px 8px;border-radius:9px;border:2px solid var(--ink);width:88px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1.5px solid var(--ink);margin-left:6px}
+.ok{background:#c6f2d0}.no{background:#ffd9d9}.ctr{background:#ffe7a8}
+.warn{background:#ffe7a8;border:var(--stroke);border-radius:12px;padding:10px 12px;font-size:13px;margin-top:12px}
+.drink{display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:start}
+.drink img{width:64px;height:64px;object-fit:contain;border:var(--stroke);border-radius:12px;background:var(--yellow)}
+.dname{font-weight:700;font-size:16px}
+</style></head><body><div class="wrap">
+
+<div class="top">
+  <h1>CAGlorie · Admin</h1>
+  <span class="net" id="net"></span>
+  <span class="mono muted" id="addr"></span>
+  <span style="margin-left:auto"></span>
+  <button id="connect">Connect owner wallet</button>
+</div>
+<div id="msg">Loading…</div>
+
+<div class="tabs">
+  <button data-tab="week" class="on">Week &amp; players</button>
+  <button data-tab="food">Food</button>
+  <button data-tab="drinks">Drinks</button>
+  <button data-tab="pool">Prize pool</button>
+  <button data-tab="advanced">Advanced</button>
+</div>
+
+<section class="tab on" id="tab-week">
+  <div class="row" style="margin-bottom:14px">
+    <label>Week <input id="week" type="number" min="0" style="width:90px"></label>
+    <button id="load" class="p">Load</button>
+    <button id="csv">Download CSV</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <table><thead><tr><th>#</th><th>Name</th><th>Wallet</th><th class="r">Calories</th><th class="r">Share</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+</section>
+
+<section class="tab" id="tab-food"><div id="foodPanel"></div></section>
+<section class="tab" id="tab-drinks"><div id="drinksPanel"></div></section>
+<section class="tab" id="tab-pool"><div id="poolPanel"></div></section>
+<section class="tab" id="tab-advanced"><div id="advPanel"></div></section>
+
+</div>
+<script>
+const CONTRACT='0xa54B5868FBe29435639DE546921DB55760E931f2';
+const ABI=[{"inputs":[{"internalType":"address","name":"_cag","type":"address"},{"internalType":"address","name":"_nft","type":"address"},{"internalType":"address","name":"_treasury","type":"address"},{"internalType":"uint256[4]","name":"_calMin","type":"uint256[4]"},{"internalType":"uint256[4]","name":"_calMax","type":"uint256[4]"},{"internalType":"uint256[3]","name":"_supersizePrice","type":"uint256[3]"},{"internalType":"uint256","name":"_chocolatePrice","type":"uint256"},{"internalType":"uint256","name":"_minCalories","type":"uint256"},{"internalType":"uint256","name":"_announcedPool","type":"uint256"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"bool","name":"banned","type":"bool"}],"name":"Banned","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"ChocolateBought","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":true,"internalType":"uint256","name":"week","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Claimed","type":"event"},{"anonymous":false,"inputs":[],"name":"ConfigUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"drinkId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"DrinksWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint8","name":"food","type":"uint8"},{"indexed":false,"internalType":"uint256","name":"cal","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"week","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"weekTotal","type":"uint256"},{"indexed":false,"internalType":"bool","name":"doubled","type":"bool"}],"name":"Fed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"string","name":"name","type":"string"}],"name":"NameSet","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"week","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"total","type":"uint256"}],"name":"PoolFunded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint8","name":"food","type":"uint8"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"Supersized","type":"event"},{"inputs":[],"name":"BIG_ORDER","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"CHOCOLATE","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"COLLAB","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"DRINK","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MEAL","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"SNACK","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"WEEK","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"allTimeCalories","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"announcedPool","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"banned","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"buyChocolate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"cag","outputs":[{"internalType":"contract IERC20","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"calMax","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"calMin","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"chocolateOwned","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"chocolatePrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"}],"name":"claim","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"claimWeeks","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"week","type":"uint256"}],"name":"claimable","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"address","name":"","type":"address"}],"name":"claimed","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"collabCooldownLeft","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"collabEligible","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint8","name":"food","type":"uint8"}],"name":"cooldownLeft","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"cooldowns","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"currentWeek","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"}],"name":"displayPool","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"id","type":"uint256"}],"name":"drinkCooldownLeft","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"drinkNft","outputs":[{"internalType":"contract IERC1155","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"drinks","outputs":[{"internalType":"bool","name":"enabled","type":"bool"},{"internalType":"uint32","name":"calMin","type":"uint32"},{"internalType":"uint32","name":"calMax","type":"uint32"},{"internalType":"uint32","name":"cooldown","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"drinksInStock","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint8","name":"food","type":"uint8"}],"name":"feed","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"feedCollab","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"feedCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"fundPool","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"genesis","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCollabInfo","outputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"icon","type":"string"},{"internalType":"string","name":"partner","type":"string"},{"internalType":"string","name":"partnerLink","type":"string"},{"internalType":"string","name":"condition","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getCollabPlayer","outputs":[{"internalType":"uint256","name":"_lastFed","type":"uint256"},{"internalType":"bool","name":"_supersized","type":"bool"},{"internalType":"bool","name":"_eligible","type":"bool"},{"internalType":"uint256","name":"_cooldownLeft","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCollabRules","outputs":[{"internalType":"bool","name":"enabled","type":"bool"},{"internalType":"address","name":"gate","type":"address"},{"internalType":"uint8","name":"gateType","type":"uint8"},{"internalType":"uint256","name":"gateId","type":"uint256"},{"internalType":"uint256","name":"minAmount","type":"uint256"},{"internalType":"uint256","name":"cMin","type":"uint256"},{"internalType":"uint256","name":"cMax","type":"uint256"},{"internalType":"uint256","name":"cooldown","type":"uint256"},{"internalType":"uint256","name":"superPrice","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getConfig","outputs":[{"internalType":"uint256[4]","name":"_calMin","type":"uint256[4]"},{"internalType":"uint256[4]","name":"_calMax","type":"uint256[4]"},{"internalType":"uint256[4]","name":"_cooldowns","type":"uint256[4]"},{"internalType":"uint256[4]","name":"_supersizePrice","type":"uint256[4]"},{"internalType":"uint256","name":"_chocolatePrice","type":"uint256"},{"internalType":"uint256","name":"_minCalories","type":"uint256"},{"internalType":"uint256","name":"_week","type":"uint256"},{"internalType":"uint256","name":"_weekEnd","type":"uint256"},{"internalType":"uint256","name":"_pool","type":"uint256"},{"internalType":"uint256","name":"_qualifiedCalories","type":"uint256"},{"internalType":"uint256","name":"_now","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getDrinkIds","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"id","type":"uint256"}],"name":"getDrinkInfo","outputs":[{"internalType":"address","name":"nftAddress","type":"address"},{"internalType":"bool","name":"enabled","type":"bool"},{"internalType":"uint256","name":"cMin","type":"uint256"},{"internalType":"uint256","name":"cMax","type":"uint256"},{"internalType":"uint256","name":"cooldown","type":"uint256"},{"internalType":"uint256","name":"stock","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"id","type":"uint256"}],"name":"getDrinkPlayer","outputs":[{"internalType":"uint256","name":"balance","type":"uint256"},{"internalType":"uint256","name":"secondsLeft","type":"uint256"},{"internalType":"bool","name":"canDrink","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"limit","type":"uint256"}],"name":"getHistory","outputs":[{"components":[{"internalType":"uint40","name":"time","type":"uint40"},{"internalType":"uint8","name":"food","type":"uint8"},{"internalType":"uint32","name":"cal","type":"uint32"},{"internalType":"bool","name":"doubled","type":"bool"},{"internalType":"uint32","name":"week","type":"uint32"}],"internalType":"struct CAGlorie.Serving[]","name":"out","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"}],"name":"getLeaderboard","outputs":[{"internalType":"address[]","name":"players","type":"address[]"},{"internalType":"uint256[]","name":"cals","type":"uint256[]"},{"internalType":"string[]","name":"playerNames","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayer","outputs":[{"internalType":"uint256[4]","name":"_lastFed","type":"uint256[4]"},{"internalType":"bool[4]","name":"_supersized","type":"bool[4]"},{"internalType":"bool","name":"_chocolateOwned","type":"bool"},{"internalType":"bool","name":"_hasNft","type":"bool"},{"internalType":"string","name":"_name","type":"string"},{"internalType":"uint256","name":"_weekCal","type":"uint256"},{"internalType":"uint256","name":"_allTime","type":"uint256"},{"internalType":"uint256","name":"_claimableLastWeek","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"hasNft","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"minCalories","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"names","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nft","outputs":[{"internalType":"contract IERC721","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"from","type":"address"},{"internalType":"uint256[]","name":"ids","type":"uint256[]"},{"internalType":"uint256[]","name":"values","type":"uint256[]"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onERC1155BatchReceived","outputs":[{"internalType":"bytes4","name":"","type":"bytes4"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"from","type":"address"},{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onERC1155Received","outputs":[{"internalType":"bytes4","name":"","type":"bytes4"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"}],"name":"playerCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"recoverPool","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint8","name":"food","type":"uint8"}],"name":"requiresNft","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address","name":"_treasury","type":"address"},{"internalType":"address","name":"_nft","type":"address"}],"name":"setAddresses","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"bool","name":"isBanned","type":"bool"}],"name":"setBanned","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_claimWeeks","type":"uint256"}],"name":"setClaimWeeks","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bool","name":"enabled","type":"bool"}],"name":"setCollabEnabled","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"icon","type":"string"},{"internalType":"string","name":"partner","type":"string"},{"internalType":"string","name":"partnerLink","type":"string"},{"internalType":"string","name":"condition","type":"string"}],"name":"setCollabInfo","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"gate","type":"address"},{"internalType":"uint8","name":"gateType","type":"uint8"},{"internalType":"uint256","name":"gateId","type":"uint256"},{"internalType":"uint256","name":"minAmount","type":"uint256"},{"internalType":"uint256","name":"cMin","type":"uint256"},{"internalType":"uint256","name":"cMax","type":"uint256"},{"internalType":"uint256","name":"cooldown","type":"uint256"},{"internalType":"uint256","name":"superPrice","type":"uint256"}],"name":"setCollabRules","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[4]","name":"_cooldowns","type":"uint256[4]"}],"name":"setCooldowns","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"uint256","name":"_calMin","type":"uint256"},{"internalType":"uint256","name":"_calMax","type":"uint256"},{"internalType":"uint256","name":"_cooldown","type":"uint256"},{"internalType":"bool","name":"_enabled","type":"bool"}],"name":"setDrink","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_drinkNft","type":"address"}],"name":"setDrinkCollection","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"bool","name":"_enabled","type":"bool"}],"name":"setDrinkEnabled","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[4]","name":"_calMin","type":"uint256[4]"},{"internalType":"uint256[4]","name":"_calMax","type":"uint256[4]"},{"internalType":"uint256[3]","name":"_supersizePrice","type":"uint256[3]"},{"internalType":"uint256","name":"_chocolatePrice","type":"uint256"},{"internalType":"uint256","name":"_minCalories","type":"uint256"},{"internalType":"uint256","name":"_announcedPool","type":"uint256"}],"name":"setEconomy","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"setName","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint8","name":"food","type":"uint8"}],"name":"supersize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"supersizeCollab","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"supersizePrice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes4","name":"interfaceId","type":"bytes4"}],"name":"supportsInterface","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"treasury","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"address","name":"","type":"address"}],"name":"weekCalories","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"week","type":"uint256"}],"name":"weekEndsAt","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"weekPool","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"weekQualifiedCalories","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"withdrawDrinks","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+const ERC20_ABI=['function balanceOf(address) view returns (uint256)','function allowance(address,address) view returns (uint256)','function approve(address,uint256) returns (bool)'];
+const DRINKS_ABI=['function owner() view returns (address)','function uri(uint256) view returns (string)','function maxSupply(uint256) view returns (uint256)','function totalSupply(uint256) view returns (uint256)','function balanceOf(address,uint256) view returns (uint256)','function mint(address,uint256,uint256)','function createDrink(uint256,string,uint256)','function setMaxSupply(uint256,uint256)','function setURI(uint256,string)'];
+const RPC='https://saigon-testnet.roninchain.com/rpc', CHAIN_ID=202601, CHAIN_HEX='0x31769';
+const FOODS=['Snack','Meal','Big Order','Chocolate'];
+const ro=new ethers.JsonRpcProvider(RPC,CHAIN_ID,{staticNetwork:true,batchMaxCount:1}), game=new ethers.Contract(CONTRACT,ABI,ro);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function rpc(fn,tries=6){ for(let i=0;;i++){ try{ const v=await fn(); await sleep(60); return v; }catch(e){ const m=(e.message||'')+(e.info?JSON.stringify(e.info):''); if(i<tries&&/429|Too many|SERVER_ERROR|rate/i.test(m)){ await sleep(400*(i+1)); continue; } throw e; } } }
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const fmt=v=>Math.floor(Number(ethers.formatUnits(v,18))).toLocaleString('en-US');
+const cag=v=>Number(ethers.formatUnits(v,18));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const val=s=>{ const el=document.querySelector(s); return el?Number(el.value):NaN; };
+const txt=s=>{ const el=document.querySelector(s); return el?el.value.trim():''; };
+let signer=null, gameW=null, me=null, data=null, drinks=null, econ=null, collab=null, adv=null, cagAddr=null, isOwner=false;
+$('#addr').textContent=CONTRACT;
+$('#net').textContent = CHAIN_ID===2020?'RONIN MAINNET':'SAIGON TESTNET';
+if(CHAIN_ID!==2020) $('#net').classList.add('test');
+
+$$('.tabs button').forEach(b=>b.onclick=()=>{
+  $$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+b.dataset.tab));
+});
+
+// ============================================================ carga general
+async function load(){
+  $('#msg').textContent='Reading contract…';
+  const cfg=await rpc(()=>game.getConfig()); const cw=Number(cfg._week);
+  let week=$('#week').value===''?cw:Number($('#week').value); $('#week').value=week;
+
+  econ={ calMin:cfg._calMin.map(Number), calMax:cfg._calMax.map(Number),
+         cooldowns:cfg._cooldowns.map(v=>Number(v)/3600), superPrice:cfg._supersizePrice.map(cag),
+         chocolate:cag(cfg._chocolatePrice), minCal:Number(cfg._minCalories),
+         announced:cag(await rpc(()=>game.announcedPool())) };
+
+  const [players,cals,names]=await rpc(()=>game.getLeaderboard(week));
+  const pool=await rpc(()=>game.weekPool(week)), qual=await rpc(()=>game.weekQualifiedCalories(week)), min=Number(cfg._minCalories);
+  const ends=Number(await rpc(()=>game.weekEndsAt(week)))*1000;
+  const claimWeeks=Number(await rpc(()=>game.claimWeeks()));
+  if(!cagAddr) cagAddr=await rpc(()=>game.cag());
+  const cagBal=await rpc(()=>new ethers.Contract(cagAddr,ERC20_ABI,ro).balanceOf(CONTRACT));
+  adv={ claimWeeks, treasury:await rpc(()=>game.treasury()), nft:await rpc(()=>game.nft()),
+        owner:await rpc(()=>game.owner()), cag:cagAddr, genesis:Number(await rpc(()=>game.genesis()))*1000 };
+
+  const rows=[];
+  for(let i=0;i<players.length;i++){
+    const a=players[i], cal=Number(cals[i]);
+    $('#msg').textContent=`Reading player ${i+1} of ${players.length}…`;
+    const claimed=await rpc(()=>game.claimed(week,a)), banned=await rpc(()=>game.banned(a)), code=await rpc(()=>ro.getCode(a));
+    const share=(cal>=min&&qual>0n)?pool*BigInt(cal)/qual:0n;
+    rows.push({rank:0,name:names[i]||'',addr:a,cal,share,qualified:cal>=min,claimed,banned,isContract:code&&code!=='0x'});
+  }
+  rows.sort((x,y)=>y.cal-x.cal); rows.forEach((r,i)=>r.rank=i+1);
+  data={week,rows,pool,qual:Number(qual),min,cw,ends,claimWeeks,cagBal};
+  await loadDrinks(); await loadCollab();
+  render();
+}
+
+async function loadDrinks(){
+  drinks=null;
+  try{
+    const nftAddr=await rpc(()=>game.drinkNft());
+    if(nftAddr===ethers.ZeroAddress){ drinks={collection:null,items:[]}; return; }
+    const c=new ethers.Contract(nftAddr,DRINKS_ABI,ro);
+    const ids=await rpc(()=>game.getDrinkIds());
+    const items=[];
+    for(const id of ids){
+      const info=await rpc(()=>game.getDrinkInfo(id));
+      const stock=Number(await rpc(()=>game.drinksInStock(id)));
+      const max=Number(await rpc(()=>c.maxSupply(id))), total=Number(await rpc(()=>c.totalSupply(id)));
+      let uri='', meta={};
+      try{ uri=await rpc(()=>c.uri(id)); const r=await fetch(uri); if(r.ok) meta=await r.json(); }catch(e){}
+      items.push({ id:Number(id), enabled:info[1], cMin:Number(info[2]), cMax:Number(info[3]),
+                   cooldown:Number(info[4]), stock, max, total,
+                   name:meta.name||('Drink #'+id), img:meta.game_image||meta.image||null, uri });
+    }
+    drinks={collection:nftAddr, items};
+  }catch(e){ console.warn('drinks',e); drinks={error:(e.reason||e.shortMessage||e.message)}; }
+}
+
+async function loadCollab(){
+  collab=null;
+  try{
+    const r=await rpc(()=>game.getCollabRules()), i=await rpc(()=>game.getCollabInfo());
+    collab={ enabled:r[0], gate:r[1], gateType:Number(r[2]), gateId:Number(r[3]), minAmount:Number(r[4]),
+             cMin:Number(r[5]), cMax:Number(r[6]), cooldown:Number(r[7])/3600, superPrice:cag(r[8]),
+             name:i[0], icon:i[1], partner:i[2], partnerLink:i[3], condition:i[4] };
+  }catch(e){ console.warn('collab',e); }
+}
+
+// ================================================================== render
+function render(){ renderWeek(); renderFood(); renderDrinks(); renderPool(); renderAdv(); }
+const locked=()=>!signer||!isOwner;
+const lockNote=()=>locked()?'<div class="warn">Connect the owner wallet to use these buttons.</div>':'';
+
+function renderWeek(){
+  const d=data, status=d.week<d.cw?(d.cw>d.week+d.claimWeeks?'closed · claim window over':'closed · claiming open'):'in progress';
+  $('#msg').textContent=`Week ${d.week} · ${status} · ends ${new Date(d.ends).toUTCString()}`;
+  const q=d.rows.filter(r=>r.qualified&&!r.banned), paid=d.rows.filter(r=>r.claimed).reduce((s,r)=>s+r.share,0n);
+  $('#cards').innerHTML=[['POOL',fmt(d.pool)+' $CAG'],['PLAYERS',d.rows.length],['QUALIFIED',q.length],['QUALIFIED CAL',d.qual.toLocaleString('en-US')],['CLAIMED',fmt(paid)+' $CAG'],['MIN',d.min.toLocaleString('en-US')+' cal']]
+    .map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $('#rows').innerHTML=d.rows.map(r=>`<tr class="${r.banned?'ban':r.qualified?'':'unq'}">
+    <td>${r.rank}</td><td>${esc(r.name)||'<i>no name</i>'}${r.isContract?'<span class="tag ctr">CONTRACT</span>':''}</td>
+    <td class="mono"><a href="https://app.roninchain.com/address/${r.addr}" target="_blank" rel="noopener">${r.addr}</a></td>
+    <td class="r mono">${r.cal.toLocaleString('en-US')}</td><td class="r mono">${r.qualified?fmt(r.share)+' $CAG':'—'}</td>
+    <td>${r.banned?'<span class="tag no">BANNED</span>':r.claimed?'<span class="tag ok">CLAIMED</span>':r.qualified?'<span class="tag">pending</span>':'<span class="tag">below min</span>'}</td>
+    <td>${signer?`<button class="sm ${r.banned?'':'d'}" data-ban="${r.addr}" data-v="${r.banned?0:1}">${r.banned?'Unban':'Ban'}</button>`:''}</td></tr>`).join('') || '<tr><td colspan="7">No players this week.</td></tr>';
+  $$('[data-ban]').forEach(b=>b.onclick=()=>ban(b.dataset.ban,b.dataset.v==='1'));
+}
+
+// ---------------------------------------------------------------- comidas
+function renderFood(){
+  const e=econ, dis=locked()?'disabled':'';
+  $('#foodPanel').innerHTML=`
+    <div class="panel">
+      <h3>The five dishes</h3>
+      <div class="sub">Everything here is live: change a number, hit Save, and players see it on their next refresh.</div>
+      <table><thead><tr><th>Dish</th><th class="r">Min cal</th><th class="r">Max cal</th><th class="r">Cooldown (h)</th><th class="r">Supersize ($CAG)</th></tr></thead><tbody>
+      ${FOODS.map((n,i)=>`<tr>
+        <td><b>${n}</b>${i===3?'<span class="tag">bought with $CAG</span>':''}</td>
+        <td class="r"><input type="number" min="1" value="${e.calMin[i]}" data-fmin="${i}" ${dis}></td>
+        <td class="r"><input type="number" min="1" value="${e.calMax[i]}" data-fmax="${i}" ${dis}></td>
+        <td class="r"><input type="number" min="0.25" step="0.25" value="${e.cooldowns[i]}" data-fcd="${i}" ${dis}></td>
+        <td class="r">${i===3?'<span class="muted">cannot be supersized</span>':`<input type="number" min="0" value="${e.superPrice[i]}" data-fsp="${i}" ${dis}>`}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="row" style="margin-top:14px">
+        <label>Chocolate price</label><input type="number" min="0" value="${e.chocolate}" id="ecChoc" style="width:120px" ${dis}><span class="muted">$CAG</span>
+        <label style="margin-left:18px">Weekly minimum to qualify</label><input type="number" min="1" value="${e.minCal}" id="ecMin" style="width:120px" ${dis}><span class="muted">cal</span>
+      </div>
+      <div class="row">
+        <label>Announced pool</label><input type="number" min="0" value="${e.announced}" id="ecAnn" style="width:160px" ${dis}><span class="muted">$CAG · only the number the game shows when the week isn't funded yet</span>
+      </div>
+      <div class="actions">
+        <button class="p" id="ecSave" ${dis}>Save changes</button>
+        <span class="muted" id="ecWhat">No changes yet.</span>
+      </div>
+      ${lockNote()}
+    </div>`;
+  if(!locked()){
+    $('#ecSave').onclick=saveEconomy;
+    $('#foodPanel').addEventListener('input',describeEconomy);
+    describeEconomy();
+  }
+}
+function economyDiff(){
+  const e=econ;
+  const calMin=[0,1,2,3].map(i=>val(`[data-fmin="${i}"]`)), calMax=[0,1,2,3].map(i=>val(`[data-fmax="${i}"]`));
+  const cds=[0,1,2,3].map(i=>val(`[data-fcd="${i}"]`)), sps=[0,1,2].map(i=>val(`[data-fsp="${i}"]`));
+  const choc=val('#ecChoc'), minCal=val('#ecMin'), ann=val('#ecAnn');
+  const econChanged = calMin.some((v,i)=>v!==e.calMin[i]) || calMax.some((v,i)=>v!==e.calMax[i])
+    || sps.some((v,i)=>v!==e.superPrice[i]) || choc!==e.chocolate || minCal!==e.minCal || ann!==e.announced;
+  const cdChanged = cds.some((v,i)=>v!==e.cooldowns[i]);
+  return {calMin,calMax,cds,sps,choc,minCal,ann,econChanged,cdChanged};
+}
+function describeEconomy(){
+  const d=economyDiff(), parts=[];
+  if(d.econChanged) parts.push('calories, prices and minimum');
+  if(d.cdChanged) parts.push('cooldowns');
+  $('#ecWhat').innerHTML = parts.length
+    ? `<span class="chg">${parts.length} transaction${parts.length>1?'s':''}: ${parts.join(' + ')}</span>`
+    : 'No changes yet.';
+}
+async function saveEconomy(){
+  const d=economyDiff();
+  if(!d.econChanged&&!d.cdChanged) return alert('Nothing changed');
+  for(let i=0;i<4;i++) if(!(d.calMin[i]>0&&d.calMax[i]>=d.calMin[i])) return alert(`Check the calories for ${FOODS[i]}`);
+  if(d.cds.some(v=>!(v>0))) return alert('Cooldowns must be greater than zero');
+  if(!confirm(`Save the changes? ${[d.econChanged&&'economy',d.cdChanged&&'cooldowns'].filter(Boolean).join(' + ')}`)) return;
+  const wei=n=>ethers.parseUnits(String(n),18);
+  if(d.econChanged) await tx('Saving the economy', ()=>gameW.setEconomy(d.calMin,d.calMax,d.sps.map(wei),wei(d.choc),d.minCal,wei(d.ann)), !d.cdChanged);
+  if(d.cdChanged) await tx('Saving the cooldowns', ()=>gameW.setCooldowns(d.cds.map(h=>Math.round(h*3600))));
+}
+
+// ---------------------------------------------------------------- bebidas
+function renderDrinks(){
+  const host=$('#drinksPanel'), dis=locked()?'disabled':'';
+  if(!drinks){ host.innerHTML='<div class="panel muted">—</div>'; return; }
+  if(drinks.error){ host.innerHTML=`<div class="panel"><div class="muted">This contract has no drinks (${esc(drinks.error)}). If you are still pointing at the old game contract, that is expected.</div></div>`; return; }
+  if(!drinks.collection){ host.innerHTML=`<div class="panel"><h3>No drinks collection linked</h3><div class="sub">Call <span class="mono">setDrinkCollection</span> on the game contract with the CaglorieDrinks address.</div></div>`; return; }
+  const cards=drinks.items.map(d=>`
+    <div class="panel">
+      <div class="drink">
+        <div>${d.img?`<img src="${esc(d.img)}" alt="">`:'<div class="mono">#'+d.id+'</div>'}</div>
+        <div style="min-width:0">
+          <div class="dname">${esc(d.name)} <span class="tag ${d.enabled?'ok':'no'}">${d.enabled?'ACTIVE':'OFF'}</span> <span class="muted mono">id ${d.id}</span></div>
+          <div class="muted">minted ${d.total} of ${d.max}</div>
+          <div class="row">
+            <div><div class="muted">waiting in the game contract</div><div class="mono" style="font-size:18px;font-weight:700">${d.stock}</div></div>
+            <button class="p sm" data-wd="${d.id}" data-n="${d.stock}" ${locked()||!d.stock?'disabled':''}>Withdraw all (${d.stock})</button>
+          </div>
+          <div class="row">
+            <label>Mint</label><input type="number" min="1" value="${Math.max(0,d.max-d.total)}" data-mintamt="${d.id}" style="width:100px" ${dis}>
+            <button class="sm" data-mint="${d.id}" ${dis}>Mint to me</button>
+            <span class="muted">${d.max-d.total} left of this batch</span>
+            <input type="number" min="${d.total}" placeholder="new cap" data-capamt="${d.id}" style="width:110px" ${dis}>
+            <button class="sm" data-cap="${d.id}" ${dis}>Raise cap</button>
+          </div>
+          <div class="row">
+            <label>Calories</label>
+            <input type="number" min="1" value="${d.cMin}" data-cmin="${d.id}" style="width:90px" ${dis}>
+            <input type="number" min="1" value="${d.cMax}" data-cmax="${d.id}" style="width:90px" ${dis}>
+            <label>every</label><input type="number" min="0.25" step="0.25" value="${d.cooldown/3600}" data-cd="${d.id}" style="width:80px" ${dis}><span class="muted">h</span>
+            <button class="sm" data-save="${d.id}" ${dis}>Save</button>
+            <button class="sm ${d.enabled?'d':''}" data-tog="${d.id}" data-v="${d.enabled?0:1}" ${dis}>${d.enabled?'Turn off':'Turn on'}</button>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+  const nuevo=`
+    <div class="panel">
+      <h3>Add a new drink</h3>
+      <div class="sub">Upload its image and its json to your site first. Then create it here, mint it, and set its numbers.</div>
+      <div class="row">
+        <label>id</label><input type="number" min="1" id="ndId" value="${drinks.items.reduce((m,d)=>Math.max(m,d.id),0)+1}" style="width:70px" ${dis}>
+        <label>json URL</label><input id="ndUri" placeholder="https://www.caglorie.com/nft/frozenslushie.json" style="width:330px" ${dis}>
+        <label>max supply</label><input type="number" min="1" id="ndMax" value="500" style="width:100px" ${dis}>
+        <button class="p" id="ndBtn" ${dis}>Create drink</button>
+      </div>
+    </div>`;
+  host.innerHTML=`<div class="muted mono" style="margin-bottom:10px">collection ${drinks.collection}</div>`+cards+nuevo+lockNote();
+  if(locked()) return;
+  $$('[data-wd]').forEach(b=>b.onclick=()=>withdrawDrinks(+b.dataset.wd,+b.dataset.n));
+  $$('[data-mint]').forEach(b=>b.onclick=()=>mintDrink(+b.dataset.mint));
+  $$('[data-cap]').forEach(b=>b.onclick=()=>raiseCap(+b.dataset.cap));
+  $$('[data-save]').forEach(b=>b.onclick=()=>saveDrink(+b.dataset.save,null));
+  $$('[data-tog]').forEach(b=>b.onclick=()=>saveDrink(+b.dataset.tog,b.dataset.v==='1'));
+  $('#ndBtn').onclick=createDrink;
+}
+
+// ------------------------------------------------------------------ pozo
+function recoverState(){
+  const d=data;
+  if(d.week>=d.cw) return {ok:false, why:'the week is still running'};
+  if(d.qual===0) return {ok:true, why:'nobody qualified, recoverable now'};
+  if(d.cw>d.week+d.claimWeeks) return {ok:true, why:'claim window closed'};
+  return {ok:false, why:`players can still claim until week ${d.week+d.claimWeeks+1}`};
+}
+function renderPool(){
+  const d=data, rec=recoverState(), dis=locked()?'disabled':'';
+  $('#poolPanel').innerHTML=`
+    <div class="panel">
+      <h3>Prize pool · week ${d.week}</h3>
+      <div class="sub">Change the week at the top of the "Week &amp; players" tab to work on another one.</div>
+      <div class="cards" style="margin-bottom:6px">
+        <div class="card"><div class="k">POOL FOR THIS WEEK</div><div class="v">${fmt(d.pool)} $CAG</div></div>
+        <div class="card"><div class="k">$CAG IN THE CONTRACT</div><div class="v">${fmt(d.cagBal)} $CAG</div></div>
+        <div class="card"><div class="k">CLAIM WINDOW</div><div class="v">${d.claimWeeks} week${d.claimWeeks>1?'s':''}</div></div>
+      </div>
+      <div class="row">
+        <label>Fund week ${d.week} with</label>
+        <input id="fundAmt" type="number" min="0" step="1000" placeholder="100000" ${dis}><span class="muted">$CAG · approves the token first if needed</span>
+        <button class="p" id="fundBtn" ${dis}>Fund pool</button>
+      </div>
+      <div class="row">
+        <label>Recover from week ${d.week}</label>
+        <input id="recAmt" type="number" min="0" step="1000" placeholder="${Math.floor(cag(d.pool))}" ${dis}><span class="muted">$CAG · goes to the owner wallet</span>
+        <button class="d" id="recBtn" ${locked()||!rec.ok?'disabled':''}>Recover</button>
+        <span class="${rec.ok?'muted':'chg'}">${rec.ok?'✓ '+rec.why:'blocked · '+rec.why}</span>
+      </div>
+      ${lockNote()}
+    </div>`;
+  if(locked()) return;
+  $('#fundBtn').onclick=fundPool;
+  if(rec.ok) $('#recBtn').onclick=recoverPool;
+}
+
+// -------------------------------------------------------------- avanzado
+function renderAdv(){
+  const a=adv, c=collab, dis=locked()?'disabled':'';
+  $('#advPanel').innerHTML=`
+    <div class="panel">
+      <h3>Collab dish</h3>
+      <div class="sub">The fifth slot, the one gated by a partner's NFT or token.</div>
+      ${c?`
+      <div class="row">
+        <label>Name</label><input id="cbName" value="${esc(c.name)}" style="width:180px" ${dis}>
+        <label>Icon</label><input id="cbIcon" value="${esc(c.icon)}" style="width:90px" ${dis}>
+        <label>Partner</label><input id="cbPartner" value="${esc(c.partner)}" style="width:150px" ${dis}>
+      </div>
+      <div class="row">
+        <label>Link</label><input id="cbLink" value="${esc(c.partnerLink)}" style="width:300px" ${dis}>
+        <label>Condition text</label><input id="cbCond" value="${esc(c.condition)}" style="width:260px" ${dis}>
+        <button class="sm" id="cbInfoBtn" ${dis}>Save texts</button>
+      </div>
+      <div class="row">
+        <label>Calories</label><input type="number" id="cbMin" value="${c.cMin}" style="width:90px" ${dis}>
+        <input type="number" id="cbMax" value="${c.cMax}" style="width:90px" ${dis}>
+        <label>every</label><input type="number" step="0.25" id="cbCd" value="${c.cooldown}" style="width:80px" ${dis}><span class="muted">h</span>
+        <label>Supersize</label><input type="number" id="cbSp" value="${c.superPrice}" style="width:100px" ${dis}><span class="muted">$CAG · 0 = off</span>
+      </div>
+      <div class="row">
+        <label>Gate</label><input id="cbGate" value="${c.gate}" class="mono" style="width:330px" ${dis}>
+        <select id="cbType" ${dis}>
+          ${[[0,'open to everyone'],[1,'ERC-721 NFT'],[2,'ERC-20 token'],[3,'ERC-1155']].map(([v,n])=>`<option value="${v}" ${c.gateType===v?'selected':''}>${n}</option>`).join('')}
+        </select>
+        <label>id</label><input type="number" id="cbGid" value="${c.gateId}" style="width:80px" ${dis}>
+        <label>min</label><input type="number" id="cbMinAmt" value="${c.minAmount}" style="width:100px" ${dis}>
+        <button class="sm" id="cbRulesBtn" ${dis}>Save rules</button>
+      </div>
+      <div class="actions">
+        <span class="tag ${c.enabled?'ok':'no'}">${c.enabled?'SHOWING IN THE GAME':'HIDDEN'}</span>
+        <button class="sm ${c.enabled?'d':'p'}" id="cbTogBtn" ${dis}>${c.enabled?'Hide it':'Show it'}</button>
+      </div>`:'<div class="muted">Could not read the collab dish.</div>'}
+    </div>
+
+    <div class="panel">
+      <h3>Claim window</h3>
+      <div class="sub">How many weeks players have to claim a prize after their week ends. Longer is friendlier, but it also delays when you can recover what nobody claimed.</div>
+      <div class="row">
+        <input type="number" min="1" id="cwInput" value="${a.claimWeeks}" style="width:90px" ${dis}><span class="muted">week(s)</span>
+        <button class="sm" id="cwBtn" ${dis}>Save</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Addresses</h3>
+      <div class="sub">The treasury collects the $CAG from supersizes and chocolates. The NFT gates Meal and Big Order.</div>
+      <div class="row"><label>Treasury</label><input id="adTre" value="${a.treasury}" class="mono" style="width:380px" ${dis}></div>
+      <div class="row"><label>CAG NFT</label><input id="adNft" value="${a.nft}" class="mono" style="width:380px" ${dis}>
+        <button class="sm" id="adBtn" ${dis}>Save both</button></div>
+      <div class="row muted mono">$CAG token ${a.cag} · read only</div>
+      <div class="row muted mono">owner ${a.owner} · week 0 started ${new Date(a.genesis).toUTCString()}</div>
+      <div class="warn">Transferring ownership is deliberately not available here: a mis-click would hand the contract to someone else for good. If you ever need it, do it from the explorer.</div>
+    </div>
+    ${lockNote()}`;
+  if(locked()||!c) return;
+  $('#cbInfoBtn').onclick=()=>tx('Saving the collab texts',()=>gameW.setCollabInfo(txt('#cbName'),txt('#cbIcon'),txt('#cbPartner'),txt('#cbLink'),txt('#cbCond')));
+  $('#cbRulesBtn').onclick=()=>{
+    if(!(val('#cbMin')>0&&val('#cbMax')>=val('#cbMin'))) return alert('Check the calories');
+    if(!(val('#cbCd')>0)) return alert('Check the cooldown');
+    tx('Saving the collab rules',()=>gameW.setCollabRules(txt('#cbGate'),val('#cbType'),val('#cbGid'),val('#cbMinAmt'),val('#cbMin'),val('#cbMax'),Math.round(val('#cbCd')*3600),ethers.parseUnits(String(val('#cbSp')),18)));
+  };
+  $('#cbTogBtn').onclick=()=>tx(c.enabled?'Hiding the collab dish':'Showing the collab dish',()=>gameW.setCollabEnabled(!c.enabled));
+  $('#cwBtn').onclick=()=>{ if(!(val('#cwInput')>=1)) return alert('Minimum 1'); tx('Saving the claim window',()=>gameW.setClaimWeeks(val('#cwInput'))); };
+  $('#adBtn').onclick=()=>{ if(!confirm('Change the treasury and NFT addresses?')) return; tx('Saving the addresses',()=>gameW.setAddresses(txt('#adTre'),txt('#adNft'))); };
+}
+
+// ================================================================ acciones
+async function tx(label, fn, reload=true){
+  try{
+    $('#msg').textContent=label+' · confirm in wallet…';
+    const t=await fn();
+    $('#msg').textContent='Waiting for Ronin…';
+    await t.wait();
+    if(reload) await load(); else $('#msg').textContent='Done.';
+  }catch(e){ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); }
+}
+const drinksW=()=>new ethers.Contract(drinks.collection,DRINKS_ABI,signer);
+async function ban(addr,v){ if(!confirm(`${v?'Ban':'Unban'} ${addr}?`)) return; tx(v?'Banning':'Unbanning', ()=>gameW.setBanned(addr,v)); }
+async function fundPool(){
+  const n=val('#fundAmt'); if(!(n>0)) return alert('Enter an amount');
+  const amount=ethers.parseUnits(String(n),18);
+  const c=new ethers.Contract(cagAddr,ERC20_ABI,signer);
+  const allow=await rpc(()=>c.allowance(me,CONTRACT));
+  if(allow<amount){
+    if(!confirm(`First you need to approve ${n.toLocaleString('en-US')} $CAG. Two transactions in total. Continue?`)) return;
+    await tx('Approving $CAG', ()=>c.approve(CONTRACT,amount), false);
+  }
+  if(!confirm(`Fund week ${data.week} with ${n.toLocaleString('en-US')} $CAG?`)) return;
+  tx('Funding the pool', ()=>gameW.fundPool(data.week,amount));
+}
+async function recoverPool(){
+  const n=val('#recAmt'); if(!(n>0)) return alert('Enter an amount');
+  if(!confirm(`Recover ${n.toLocaleString('en-US')} $CAG from week ${data.week}?`)) return;
+  tx('Recovering', ()=>gameW.recoverPool(data.week,ethers.parseUnits(String(n),18)));
+}
+async function withdrawDrinks(id,n){ if(!confirm(`Withdraw ${n} unit(s) of drink #${id} to your wallet?`)) return; tx('Withdrawing drinks', ()=>gameW.withdrawDrinks(me,id,n)); }
+async function mintDrink(id){
+  const n=val(`[data-mintamt="${id}"]`); if(!(n>0)) return alert('Enter an amount');
+  if(!confirm(`Mint ${n} unit(s) of drink #${id} to your wallet?`)) return;
+  tx('Minting', ()=>drinksW().mint(me,id,n));
+}
+async function raiseCap(id){ const n=val(`[data-capamt="${id}"]`); if(!(n>0)) return alert('Enter the new cap'); tx('Raising the cap', ()=>drinksW().setMaxSupply(id,n)); }
+async function saveDrink(id,enabledOverride){
+  const d=drinks.items.find(x=>x.id===id);
+  const cMin=val(`[data-cmin="${id}"]`), cMax=val(`[data-cmax="${id}"]`), hours=val(`[data-cd="${id}"]`);
+  const enabled=enabledOverride===null?d.enabled:enabledOverride;
+  if(!(cMin>0&&cMax>=cMin&&hours>0)) return alert('Check the numbers');
+  tx('Saving the drink', ()=>gameW.setDrink(id,cMin,cMax,Math.round(hours*3600),enabled));
+}
+async function createDrink(){
+  const id=val('#ndId'), uri=txt('#ndUri'), max=val('#ndMax');
+  if(!(id>0)||!uri||!(max>0)) return alert('Complete the three fields');
+  if(!/^(https?|ipfs):\/\//i.test(uri)) return alert('The json URL looks wrong');
+  if(!confirm(`Create drink #${id} with a cap of ${max}?\n\n${uri}`)) return;
+  tx('Creating the drink', ()=>drinksW().createDrink(id,uri,max));
+}
+function csv(){
+  if(!data) return;
+  const lines=[['rank','name','wallet','calories','qualified','share_cag','claimed','banned','is_contract'].join(',')]
+    .concat(data.rows.map(r=>[r.rank,`"${r.name.replace(/"/g,'""')}"`,r.addr,r.cal,r.qualified,ethers.formatUnits(r.share,18),r.claimed,r.banned,r.isContract].join(',')));
+  lines.push('', `# week ${data.week}, pool ${ethers.formatUnits(data.pool,18)} CAG, qualified calories ${data.qual}, min ${data.min}, exported ${new Date().toISOString()}`);
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=`caglorie_week${data.week}.csv`; a.click();
+}
+async function connect(){
+  const inj=window.ronin?.provider||window.ethereum; if(!inj){ alert('No wallet found'); return; }
+  const accounts=await inj.request({method:'eth_requestAccounts'});
+  const cid=parseInt(await inj.request({method:'eth_chainId'}),16);
+  if(cid!==CHAIN_ID){ try{ await inj.request({method:'wallet_switchEthereumChain',params:[{chainId:CHAIN_HEX}]}); }catch{ alert('Switch the wallet to the right network'); return; } }
+  const p=new ethers.BrowserProvider(inj); signer=await p.getSigner(); me=ethers.getAddress(accounts[0]); gameW=game.connect(signer);
+  isOwner=(await rpc(()=>game.owner())).toLowerCase()===me.toLowerCase();
+  $('#connect').textContent=me.slice(0,6)+'…'+me.slice(-4)+(isOwner?' (owner)':' (NOT owner)');
+  if(data) render();
+}
+$('#load').onclick=()=>load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
+$('#csv').onclick=csv; $('#connect').onclick=connect;
+if(typeof ethers==='undefined'){ $('#msg').textContent='Error: could not load ethers.js (no internet or blocked CDN).'; }
+else load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
+</script></body></html>
