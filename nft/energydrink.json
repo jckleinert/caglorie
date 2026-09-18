@@ -1,6 +1,7 @@
 {
   "name": "CAG Energy Drink",
-  "description": "CAG's favorite energy drink. A consumable item in CAGlorie.",
+  "description": "CAG's favorite energy drink. A consumable item in CAGlorie: send it to the game and CAG downs the whole can. Drinking it uses up the NFT, so it leaves your wallet for good.",
   "image": "https://www.caglorie.com/nft/energydrink.jpg",
+  "game_image": "https://www.caglorie.com/nft/energydrink-icon.png",
   "external_url": "https://www.caglorie.com/caglorie.html"
 }
