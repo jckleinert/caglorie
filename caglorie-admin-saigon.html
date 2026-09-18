@@ -493,4 +493,4 @@ $('#load').onclick=()=>load().catch(e=>{ $('#msg').textContent='Error: '+(e.reas
 $('#csv').onclick=csv; $('#connect').onclick=connect;
 if(typeof ethers==='undefined'){ $('#msg').textContent='Error: could not load ethers.js (no internet or blocked CDN).'; }
 else load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
-</script></body></html> 
+</script></body></html>
