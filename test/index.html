@@ -611,7 +611,7 @@ window.addEventListener('scroll',onScroll,{passive:true});window.addEventListene
 <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
 <script>
 (async function(){
-  0x8Ec65016Fa843D4d94BbAB108Cb692DBC982A8c7;
+  const CONTRACT='0x8Ec65016Fa843D4d94BbAB108Cb692DBC982A8c7';
   const ABI=['function getConfig() view returns (uint256[4],uint256[4],uint256[4],uint256[4],uint256,uint256,uint256,uint256,uint256,uint256,uint256)'];
   try{
     const p=new ethers.JsonRpcProvider('https://api.roninchain.com/rpc',2020);
