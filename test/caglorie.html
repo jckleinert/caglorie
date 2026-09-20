@@ -654,9 +654,11 @@ async function loadConfig(){
 async function loadPlayer(){
   if(!me) return;
   const [p,bal]=await Promise.all([game.getPlayer(me), cagW.balanceOf(me)]);
+  const prev=state;   // colab y bebidas se cargan aparte: se conservan hasta que llegue el dato nuevo
   state={ name:p._name, lastEaten:{}, supersized:{}, owned:{choc:p._chocolateOwned}, nft:p._hasNft,
           nftCount:Number(await game.nftBalance(me)),
-          calories:Number(p._weekCal), alltime:Number(p._allTime), cag:bal, claimable:p._claimableLastWeek };
+          calories:Number(p._weekCal), alltime:Number(p._allTime), cag:bal, claimable:p._claimableLastWeek,
+          collab: prev ? prev.collab : undefined, drinks: prev ? prev.drinks : undefined };
   IDS.forEach((id,i)=>{ state.lastEaten[id]=Number(p._lastFed[i])*1000; state.supersized[id]=p._supersized[i]; });
 }
 async function loadLB(){
@@ -669,7 +671,17 @@ async function loadLB(){
   LB={ rows, players:rows.length, pool, minQualify:CFG.minQualify, weekEnd:CFG.weekEnd,
        me: mine || {rank:0, calories:state?state.calories:0, qualified:false, payout:0} };
 }
-async function refresh(){ try{ await loadPlayer(); await Promise.all([loadCollabPlayer(), loadDrinkPlayer(), loadLB()]); render(); renderLB(); if(histOpen) loadHistory(); }catch(e){ console.warn(e); } }
+async function refresh(){
+  try{ await loadPlayer(); }catch(e){ console.warn('player', e); }
+  await Promise.allSettled([loadCollabPlayer(), loadDrinkPlayer(), loadLB()]);
+  render(); renderLB(); if(histOpen) loadHistory();
+  // si colab o bebidas quedaron sin dato, un reintento corto antes del proximo ciclo de 30 s
+  if(me && state && ((COLLAB && !state.collab) || (DRINKS.length && !state.drinks))){
+    await sleep(3000);
+    await Promise.allSettled([loadCollabPlayer(), loadDrinkPlayer()]);
+    render();
+  }
+}
 
 async function init(){
   try{ await loadConfig(); await loadCollabConfig(); await loadDrinksConfig(); await loadLB(); }
@@ -736,6 +748,7 @@ function buildCollab(){
 }
 function renderCollab(){
   const c=COLLAB, el=$('#food-collab'); if(!c||!el) return;
+  if(me && state && !state.collab) return;   // dato aun no cargado: dejar la tarjeta como esta
   const s = state?.collab || { lastEaten:0, supersized:false, eligible:false };
   const rem = s.lastEaten ? Math.max(0, s.lastEaten+c.cooldown-now()) : 0;
   const locked = !!me && !s.eligible;
@@ -887,6 +900,7 @@ function fmtEvery(ms){
 }
 
 function renderDrinks(){
+  if(me && state && !state.drinks) return;   // dato aun no cargado: dejar las tarjetas como estan
   DRINKS.forEach(d => {
     const el = $('#food-drink-'+d.id); if(!el) return;
     const s = (state?.drinks || {})[d.id] || { balance:0, left:0, can:false };
