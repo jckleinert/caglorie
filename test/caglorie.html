@@ -632,6 +632,7 @@ async function connect(silent=false){
     inj.on?.('accountsChanged', ()=>location.reload()); inj.on?.('chainChanged', ()=>location.reload());
     localStorage.setItem('caglorie_connected','1');
     await loadPlayer(); await loadCollabPlayer(); await loadDrinkPlayer();
+    try{ await loadLB(); }catch(e){ console.warn('lb', e); }   // la tabla, ahora sabiendo quien soy
     if(!state.name) await askName();
     render(); renderLB();
     return true;
@@ -699,7 +700,15 @@ async function loadLB(){
   const rows=players.map((a,i)=>({addr:a, name:names[i]||short(a), calories:Number(cals[i])})).sort((x,y)=>y.calories-x.calories);
   const pool=Number(ethers.formatUnits(CFG.pool,18));
   rows.forEach((r,i)=>{ r.rank=i+1; r.qualified=r.calories>=CFG.minQualify; r.payout=r.qualified&&CFG.qualified?Math.floor(pool*r.calories/CFG.qualified):0; });
-  const mine=me?rows.find(r=>r.addr.toLowerCase()===me.toLowerCase()):null;
+  let mine=me?rows.find(r=>r.addr.toLowerCase()===me.toLowerCase()):null;
+  if(!mine && me && state && state.calories>0){
+    // todavia no aparezco en la tabla (lectura vieja del RPC): estimo con mis propias calorias
+    const cal=state.calories, qualified=cal>=CFG.minQualify;
+    const qualTotal=Math.max(CFG.qualified, qualified?cal:0);
+    mine={ addr:me, name:state.name||short(me), calories:cal, qualified,
+           payout: qualified&&qualTotal?Math.floor(pool*cal/qualTotal):0,
+           rank: rows.filter(r=>r.calories>cal).length+1 };
+  }
   LB={ rows, players:rows.length, pool, minQualify:CFG.minQualify, weekEnd:CFG.weekEnd,
        me: mine || {rank:0, calories:state?state.calories:0, qualified:false, payout:0} };
 }
