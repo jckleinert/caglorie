@@ -74,6 +74,32 @@
   .hero .cal{font-size:52px;font-weight:700;line-height:1;margin-top:4px}
   .hero .cal small{font-size:16px;font-weight:600;color:var(--logo-pink)}
   .hero .level{margin-top:10px;background:var(--yellow);border:2px solid var(--ink);border-radius:999px;padding:3px 14px;font-weight:700;font-size:14px}
+  .hero .info .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .hero .info .row .level{margin-top:0}
+  .histBtn{font:inherit;font-weight:700;font-size:13px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);
+           border-radius:999px;padding:3px 12px;box-shadow:0 2px 0 var(--ink);cursor:pointer;transition:transform .12s,box-shadow .12s;
+           width:auto;flex:0 0 auto}
+  .histBtn:hover{transform:translateY(1px);box-shadow:0 1px 0 var(--ink)}
+  .histBtn[aria-expanded="true"]{background:var(--ink);color:#fff}
+  .hist{border-top:var(--stroke);background:var(--cream);padding:14px 24px 16px}
+  .hist .hhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+  .hist .hhead b{font-size:15px}
+  .hist .hhead span{font-size:11px;color:#5b6172}
+  .hist ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .hist li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;
+           background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:7px 12px 7px 8px}
+  .hist .hic{width:34px;height:34px;border:2px solid var(--ink);border-radius:10px;background:#6C9BD2;display:grid;place-items:center;font-size:19px}
+  .hist .hname{font-weight:700;font-size:14px;line-height:1.15;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+  .hist .hname .boost{display:inline-block;padding:1px 6px;border:2px solid var(--ink);border-radius:999px;background:var(--grass);color:#fff;
+                      font-family:'Space Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.06em;line-height:1.4}
+  .hist .hwhen{font-family:'Space Mono',monospace;font-size:11px;color:#5b6172}
+  .hist .hcal{font-family:'Space Mono',monospace;font-weight:700;color:var(--logo-pink);white-space:nowrap}
+  .hist li.old{opacity:.6}
+  .hist .hempty{font-family:'Space Mono',monospace;font-size:12px;color:#5b6172;padding:6px 2px}
+  @media(max-width:640px){.hist{padding:12px 14px 14px}.hero .info .row{justify-content:center}}
+  :root[data-theme="dark"] .hist .hhead span,:root[data-theme="dark"] .hist .hwhen,:root[data-theme="dark"] .hist .hempty{color:var(--dim)}
+  :root[data-theme="dark"] .histBtn{color:var(--text)}
+  :root[data-theme="dark"] .histBtn[aria-expanded="true"]{background:var(--yellow);color:var(--ink)}
   .stage{position:relative;width:100%;height:250px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;border-right:var(--stroke);background:var(--cream)}
   .stage .floor{position:absolute;bottom:0;left:0;right:0;height:34%;background:var(--paper);border-top:var(--stroke)}
   @media(max-width:640px){
@@ -108,11 +134,11 @@
   .card .body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
   .rarity{color:var(--logo-blue);font-weight:700;font-size:11px;letter-spacing:.12em}
   .card h2{margin:0;font-size:22px;font-weight:700;line-height:1}
-  .serves{color:#5b6172}.serves b{color:var(--logo-pink);font-weight:700}
+  .serves{color:#5b6172;white-space:nowrap;line-height:20px;min-height:20px}.serves b{color:var(--logo-pink);font-weight:700}
   .serves.up b{color:var(--grass)}
-  .serves .boost{display:inline-block;margin-left:6px;padding:1px 7px;border:2px solid var(--ink);border-radius:999px;
-                 background:var(--grass);color:#fff;font-size:9px;font-weight:700;letter-spacing:.08em;
-                 vertical-align:middle;line-height:1.5;box-shadow:2px 2px 0 var(--ink)}
+  .serves .boost{display:inline-block;margin-right:3px;padding:1px 6px;border:2px solid var(--ink);border-radius:999px;
+                 background:var(--grass);color:#fff;font-size:8.5px;font-weight:700;letter-spacing:.06em;
+                 vertical-align:middle;line-height:1.4;box-shadow:2px 2px 0 var(--ink);position:relative;top:-1px}
   .art{margin:4px auto 2px;width:104px;height:104px;border:var(--stroke);border-radius:16px;background:#6C9BD2;box-shadow:4px 4px 0 var(--ink);display:grid;place-items:center;font-size:56px}
   .art .food{display:block;line-height:1;transition:transform .15s}
   .art .food.b1{-webkit-mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%);mask:radial-gradient(circle 24px at 82% 22%,transparent 99%,#000 100%)}
@@ -414,8 +440,15 @@
           <div class="who">Feeding <b id="pname">…</b></div>
           <div class="cal"><span id="cal">0</span> <small>calories this week</small></div>
           <div class="who mono" id="rankline">Rank <b id="rank">–</b></div>
-          <div class="level" id="level">Peckish</div>
+          <div class="row">
+            <div class="level" id="level">Peckish</div>
+            <button class="histBtn" id="histBtn" type="button" aria-expanded="false" aria-controls="hist" hidden>📜 History</button>
+          </div>
         </div>
+      </div>
+      <div class="hist" id="hist" hidden>
+        <div class="hhead"><b>Your last servings</b><span class="mono" id="histSub"></span></div>
+        <ol id="histList"></ol>
       </div>
     </section>
 
@@ -636,7 +669,7 @@ async function loadLB(){
   LB={ rows, players:rows.length, pool, minQualify:CFG.minQualify, weekEnd:CFG.weekEnd,
        me: mine || {rank:0, calories:state?state.calories:0, qualified:false, payout:0} };
 }
-async function refresh(){ try{ await loadPlayer(); await Promise.all([loadCollabPlayer(), loadDrinkPlayer(), loadLB()]); render(); renderLB(); }catch(e){ console.warn(e); } }
+async function refresh(){ try{ await loadPlayer(); await Promise.all([loadCollabPlayer(), loadDrinkPlayer(), loadLB()]); render(); renderLB(); if(histOpen) loadHistory(); }catch(e){ console.warn(e); } }
 
 async function init(){
   try{ await loadConfig(); await loadCollabConfig(); await loadDrinksConfig(); await loadLB(); }
@@ -646,6 +679,7 @@ async function init(){
   setInterval(render,1000);
   setInterval(refresh,30000);
   $('#connectBtn').onclick=()=>connect(false);
+  $('#histBtn').onclick=toggleHistory;
   $('#claimBtn').onclick=claimLast;
   if(localStorage.getItem('caglorie_connected')){ await sleep(300); await connect(true); }
 }
@@ -716,7 +750,7 @@ function renderCollab(){
   {
     const up=!!s.supersized, serves=el.querySelector('[data-serves]');
     if(serves){
-      setHTML(serves, `Serves <b>${up?c.min*SUPER_MULT:c.min}–${up?c.max*SUPER_MULT:c.max}</b> cal${up?' <span class="boost">SUPERSIZED</span>':''}`);
+      setHTML(serves, `${up?'<span class="boost">SUPERSIZED</span>':'Serves'} <b>${up?c.min*SUPER_MULT:c.min}–${up?c.max*SUPER_MULT:c.max}</b> cal`);
       serves.classList.toggle('up', up);
     }
   }
@@ -891,6 +925,63 @@ async function drinkNow(id){
   }catch(e){ eating[key] = false; render(); toast(errMsg(e)); }
 }
 
+// ---------------- history (read from the contract: getHistory) ----------------
+const HIST_LIMIT = 12;
+let HIST = null, histOpen = false, histLoading = false;
+
+function foodLabel(food){
+  food = Number(food);
+  if(food < 4) return { icon: ICONS[IDS[food]], name: NAMES[food] };
+  if(food === 4) return { icon: (COLLAB && ICONS.collab) || '✦', name: (COLLAB && COLLAB.name) || 'Collab dish' };
+  const id = food - 4;
+  const d = DRINKS.find(x => Number(x.id) === id);
+  return { icon: ICONS.drink, name: d ? d.name : `Drink #${id}` };
+}
+function whenLabel(ts){
+  const diff = now() - ts*1000;
+  if(diff < 60e3) return 'just now';
+  if(diff < 3600e3) return `${Math.floor(diff/60e3)}m ago`;
+  if(diff < 24*3600e3) return `${Math.floor(diff/3600e3)}h ago`;
+  return new Date(ts*1000).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+async function loadHistory(){
+  if(!me || histLoading) return;
+  histLoading = true;
+  try{
+    const rows = await game.getHistory(me, HIST_LIMIT);
+    HIST = rows.map(r => ({ time:Number(r.time ?? r[0]), food:Number(r.food ?? r[1]), cal:Number(r.cal ?? r[2]),
+                            doubled:Boolean(r.doubled ?? r[3]), week:Number(r.week ?? r[4]) }));
+  }catch(e){ console.warn('history', e); HIST = HIST || []; }
+  finally{ histLoading = false; }
+  renderHistory();
+}
+function renderHistory(){
+  const btn = $('#histBtn'), panel = $('#hist'), list = $('#histList');
+  if(!btn || !panel) return;
+  btn.hidden = !me;
+  panel.hidden = !(me && histOpen);
+  btn.setAttribute('aria-expanded', histOpen ? 'true' : 'false');
+  if(!histOpen) return;
+  if(HIST === null){ list.innerHTML = '<li class="hempty">Loading…</li>'; setText($('#histSub'), ''); return; }
+  if(!HIST.length){ list.innerHTML = '<li class="hempty">Nothing yet — feed CAG and it shows up here.</li>'; setText($('#histSub'), ''); return; }
+  const cw = CFG ? CFG.week : null;
+  setText($('#histSub'), `last ${HIST.length} · saved on Ronin`);
+  list.innerHTML = HIST.map(h => {
+    const f = foodLabel(h.food), old = cw !== null && h.week < cw;
+    return `<li class="${old?'old':''}">
+      <span class="hic">${f.icon}</span>
+      <span><span class="hname">${esc(f.name)}${h.doubled?'<span class="boost">SUPERSIZED</span>':''}</span>
+            <span class="hwhen">${whenLabel(h.time)}${old?' · week #'+h.week:''}</span></span>
+      <span class="hcal">+${h.cal.toLocaleString()}</span>
+    </li>`;
+  }).join('');
+}
+function toggleHistory(){
+  histOpen = !histOpen;
+  renderHistory();
+  if(histOpen) loadHistory();
+}
+
 // ---------------- menu ----------------
 function buildMenu(){
   $('#menu').innerHTML = FOODS.map(f=>`
@@ -931,6 +1022,7 @@ function fmt(ms){ const s=Math.ceil(ms/1000), h=Math.floor(s/3600), m=Math.floor
 function render(){
   const connected=!!me;
   $('#connectBtn').hidden=connected; $('#walletPill').hidden=!connected;
+  { const hb=$('#histBtn'); if(hb){ hb.hidden=!connected; if(!connected){ histOpen=false; $('#hist').hidden=true; } } }
   $('#menu').classList.toggle('gated', !connected); renderCollab(); renderDrinks();
   if(CFG){
     setText($('#weeklabel'), 'Week #'+CFG.week);
@@ -974,7 +1066,7 @@ function render(){
     el.querySelector('[data-eat]').hidden=locked;
     const sb=el.querySelector('[data-super]'); if(sb) sb.hidden=locked;
     const serves=el.querySelector('[data-serves]');
-    setHTML(serves, `Serves <b>${up?f.min*SUPER_MULT:f.min}–${up?f.max*SUPER_MULT:f.max}</b> cal${up?' <span class="boost">SUPERSIZED</span>':''}`);
+    setHTML(serves, `${up?'<span class="boost">SUPERSIZED</span>':'Serves'} <b>${up?f.min*SUPER_MULT:f.min}–${up?f.max*SUPER_MULT:f.max}</b> cal`);
     serves.classList.toggle('up', up);
     el.querySelector('[data-bar]').style.width=`${100*(1-rem/f.cooldown)}%`;
     setText(el.querySelector('[data-status]'), rem ? `Cooking · ${fmt(rem)}` : 'Fresh & ready!');
