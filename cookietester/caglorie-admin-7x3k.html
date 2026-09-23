@@ -75,6 +75,7 @@ table input{padding:6px 8px;border-radius:9px;border:2px solid var(--ink);width:
     <button id="csv">Download CSV</button>
   </div>
   <div class="cards" id="cards"></div>
+  <div id="eatenPanel"></div>
   <table><thead><tr><th>#</th><th>Name</th><th>Wallet</th><th class="r">Calories</th><th class="r">Share</th><th>Status</th><th></th></tr></thead><tbody id="rows"></tbody></table>
 </section>
 
@@ -101,7 +102,7 @@ const cag=v=>Number(ethers.formatUnits(v,18));
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const val=s=>{ const el=document.querySelector(s); return el?Number(el.value):NaN; };
 const txt=s=>{ const el=document.querySelector(s); return el?el.value.trim():''; };
-let signer=null, gameW=null, me=null, data=null, drinks=null, econ=null, collab=null, adv=null, cagAddr=null, isOwner=false, task=null;
+let signer=null, gameW=null, me=null, data=null, drinks=null, econ=null, collab=null, adv=null, cagAddr=null, isOwner=false, task=null, eaten=null;
 $('#addr').textContent=CONTRACT;
 $('#net').textContent = CHAIN_ID===2020?'RONIN MAINNET':'SAIGON TESTNET';
 if(CHAIN_ID!==2020) $('#net').classList.add('test');
@@ -142,6 +143,7 @@ async function load(){
   }
   rows.sort((x,y)=>y.cal-x.cal); rows.forEach((r,i)=>r.rank=i+1);
   data={week,rows,pool:pool_,qual:Number(qual),min,cw,ends,claimWeeks,cagBal};
+  await loadEaten();
   await loadDrinks(); await loadCollab(); await loadTask(); await loadPool();
   render();
 }
@@ -179,10 +181,70 @@ async function loadCollab(){
 }
 
 // ================================================================== render
-function render(){ renderWeek(); renderFood(); renderDrinks(); renderTask(); renderPool(); renderAdv(); }
+function render(){ renderWeek(); renderEaten(); renderFood(); renderDrinks(); renderTask(); renderPool(); renderAdv(); }
 const locked=()=>!signer||!isOwner;
 const lockNote=()=>locked()?'<div class="warn">Connect the owner wallet to use these buttons.</div>':'';
 
+// Cuantas veces se comio cada cosa en la semana elegida. No hace falta nada nuevo en el
+// contrato: cada comida queda en el historial del jugador con su semana y su tipo.
+async function loadEaten(){
+  eaten=null;
+  const w=data.week, by={};
+  try{
+    for(let i=0;i<data.rows.length;i++){
+      const a=data.rows[i].addr;
+      $('#msg').textContent=`Counting what player ${i+1} of ${data.rows.length} ate…`;
+      let h=await rpc(()=>game.getHistory(a,200));
+      // viene de la mas nueva a la mas vieja: si llenamos 200 y la mas vieja sigue siendo de
+      // esta semana (o posterior), puede haber mas; se trae todo el historial
+      if(h.length===200 && Number(h[h.length-1].week ?? h[h.length-1][4])>=w){
+        const n=Number(await rpc(()=>game.feedCount(a)));
+        if(n>200) h=await rpc(()=>game.getHistory(a,n));
+      }
+      for(const r of h){
+        if(Number(r.week ?? r[4])!==w) continue;
+        const f=Number(r.food ?? r[1]), cal=Number(r.cal ?? r[2]), dbl=Boolean(r.doubled ?? r[3]);
+        const e=by[f]||(by[f]={food:f,count:0,players:new Set(),cal:0,doubled:0});
+        e.count++; e.players.add(a.toLowerCase()); e.cal+=cal; if(dbl) e.doubled++;
+      }
+    }
+    eaten={week:w, by};
+  }catch(e){ console.warn('eaten',e); eaten={error:(e.reason||e.shortMessage||e.message)}; }
+}
+function foodName(f){
+  if(f<4) return ['🍙 Snack','🍜 Meal','🍣 Big Order','🍫 Chocolate'][f];
+  if(f===4) return '✦ Collab'+(collab&&collab.name?` · ${collab.name}`:'');
+  if(f===255) return '🍪 Cookie (daily task)';
+  const d=drinks&&drinks.items&&drinks.items.find(x=>x.id===f-4);
+  return '🥤 '+(d?d.name:`Drink #${f-4}`);
+}
+function renderEaten(){
+  const host=$('#eatenPanel'); if(!host) return;
+  if(!eaten){ host.innerHTML=''; return; }
+  if(eaten.error){ host.innerHTML=`<div class="panel muted">Could not count the servings (${esc(eaten.error)}).</div>`; return; }
+  // siempre las 4 fijas + collab + cookie (aunque esten en 0), y las bebidas que existan o se hayan tomado
+  const foods=new Set([0,1,2,3,4,255]);
+  (drinks&&drinks.items||[]).forEach(d=>foods.add(4+d.id));
+  Object.keys(eaten.by).forEach(k=>foods.add(Number(k)));
+  const list=[...foods].sort((a,b)=>(a===255)-(b===255)||a-b).map(f=>eaten.by[f]||{food:f,count:0,players:new Set(),cal:0,doubled:0});
+  const total=list.reduce((s,e)=>s+e.count,0), players=data.rows.length;
+  const pct=n=>players?Math.round(100*n/players)+'%':'—';
+  host.innerHTML=`
+    <div class="panel">
+      <h3>What was eaten in week ${eaten.week}</h3>
+      <div class="sub">${total.toLocaleString('en-US')} servings in total. "Players" is how many different wallets ate it at least once, out of the ${players} who played this week.</div>
+      <table><thead><tr><th>Food</th><th class="r">Servings</th><th class="r">Players</th><th class="r">% of players</th><th class="r">Calories</th><th class="r">Supersized</th></tr></thead><tbody>
+      ${list.map(e=>`<tr class="${e.count?'':'unq'}">
+        <td><b>${esc(foodName(e.food))}</b></td>
+        <td class="r mono">${e.count.toLocaleString('en-US')}</td>
+        <td class="r mono">${e.players.size.toLocaleString('en-US')}</td>
+        <td class="r mono">${e.count?pct(e.players.size):'—'}</td>
+        <td class="r mono">${e.cal.toLocaleString('en-US')}</td>
+        <td class="r mono">${e.doubled?e.doubled.toLocaleString('en-US'):'—'}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="sub" style="margin-top:10px">The collab line counts the collab slot, whichever partner was on it. Swap partners on a Monday to keep each one's numbers clean.</div>
+    </div>`;
+}
 function renderWeek(){
   const d=data, status=d.week<d.cw?(d.cw>d.week+d.claimWeeks?'closed · claim window over':'closed · claiming open'):'in progress';
   $('#msg').textContent=`Week ${d.week} · ${status} · ends ${new Date(d.ends).toUTCString()}`;
