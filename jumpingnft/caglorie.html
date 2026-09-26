@@ -696,7 +696,8 @@ async function loadPlayer(){
   state={ name:p._name, lastEaten:{}, supersized:{}, owned:{choc:p._chocolateOwned}, nft:p._hasNft,
           nftCount:Number(await game.nftBalance(me)),
           calories:Number(p._weekCal), alltime:Number(p._allTime), cag:bal, claimable:p._claimableLastWeek,
-          collab: prev ? prev.collab : undefined, drinks: prev ? prev.drinks : undefined, task: prev ? prev.task : undefined };
+          collab: prev ? prev.collab : undefined, drinks: prev ? prev.drinks : undefined, task: prev ? prev.task : undefined,
+          nftTokens: prev ? prev.nftTokens : undefined };   // se conservan mientras se releen, asi no parpadean
   IDS.forEach((id,i)=>{ state.lastEaten[id]=Number(p._lastFed[i])*1000; state.supersized[id]=p._supersized[i]; });
   if(prev && prev.pendingUntil){
     state.pendingUntil=prev.pendingUntil;
