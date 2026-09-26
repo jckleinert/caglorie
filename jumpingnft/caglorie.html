@@ -717,19 +717,28 @@ async function loadPlayer(){
 // le falta a cada uno, para mandar al contrato uno que este listo.
 let nftRO = null;
 const NFT_MAX = 20;   // se revisan hasta 20 NFT por wallet
+async function rpcTry(fn, tries = 3){
+  for(let i = 0; ; i++){ try{ return await fn(); }catch(e){ if(i >= tries-1) throw e; await sleep(350*(i+1)); } }
+}
 async function loadNftTokens(prev){
   const gated = FOODS.filter(f => f.nftNeed > 0);
   if(!gated.length || !state.nftCount){ state.nftTokens = []; return; }
   try{
-    if(!nftRO) nftRO = new ethers.Contract(await game.nft(), NFT_ABI, readOnly);
+    if(!nftRO) nftRO = new ethers.Contract(await rpcTry(() => game.nft()), NFT_ABI, readOnly);
     const n = Math.min(state.nftCount, NFT_MAX);
-    const ids = await Promise.all([...Array(n).keys()].map(i => nftRO.tokenOfOwnerByIndex(me, i)));
-    const rows = await Promise.all(ids.map(id => Promise.all(gated.map(f => game.nftCooldownLeft(id, f.idx)))));
-    state.nftTokens = ids.map((id, i) => {
-      const t = { id, readyAt:{} };
-      gated.forEach((f, j) => { const sec = Number(rows[i][j]); t.readyAt[f.id] = sec ? now() + sec*1000 : 0; });
-      return t;
-    });
+    // De a una consulta, con reintento: el RPC publico de Ronin rechaza a veces los pedidos
+    // agrupados. Si un NFT no se puede leer se saltea, los demas siguen sirviendo.
+    const toks = [];
+    for(let i = 0; i < n; i++){
+      try{
+        const id = await rpcTry(() => nftRO.tokenOfOwnerByIndex(me, i));
+        const t = { id, readyAt:{} };
+        for(const f of gated){ const sec = Number(await rpcTry(() => game.nftCooldownLeft(id, f.idx))); t.readyAt[f.id] = sec ? now() + sec*1000 : 0; }
+        toks.push(t);
+      }catch(e){ console.warn('nft token', i, e); }
+    }
+    if(!toks.length) throw new Error('could not read any CAG NFT');
+    state.nftTokens = toks;
     // lectura vieja: conservar el descanso que esta pagina acaba de poner
     if(prev && prev.nftTokens) for(const t of state.nftTokens){
       const o = prev.nftTokens.find(x => x.id === t.id);
