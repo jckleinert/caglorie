@@ -1122,7 +1122,8 @@ async function refreshTask(){
   if(before !== after){ if(state) state.task = undefined; buildTask(); }
   await loadTaskPlayer();
 }
-const taskKey = () => `caglorie_task_${TASK?TASK.id:0}_${(me||'').toLowerCase()}`;   // por wallet: cada cuenta abre el posteo por su cuenta
+// por contrato, posteo y wallet: cada contrato nuevo vuelve a numerar los posteos desde 1
+const taskKey = () => `caglorie_task_${CONTRACT}_${TASK?TASK.id:0}_${(me||'').toLowerCase()}`.toLowerCase();
 let taskOpenedMem = {};
 function taskOpened(){ if(taskOpenedMem[taskKey()]) return true; try{ return localStorage.getItem(taskKey())==='1'; }catch(e){ return false; } }
 function markTaskOpened(){ taskOpenedMem[taskKey()] = true; try{ localStorage.setItem(taskKey(),'1'); }catch(e){} }
