@@ -435,6 +435,12 @@
   .lb.ref .st.ok{color:var(--grass);font-weight:700}
   .lb.ref .st.go{color:var(--logo-pink);font-weight:700}
   #refClaimAll{margin-top:12px}
+  .refcode{flex:1;min-width:0;display:flex;align-items:center;border:var(--stroke);border-radius:12px;background:var(--cream);padding-left:12px}
+  .refcode span{font-family:'Space Mono',monospace;font-size:12px;color:#5b6172;white-space:nowrap}
+  .refcode input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;padding:10px 12px 10px 1px;color:var(--ink);outline:none}
+  .refcode:focus-within{outline:3px solid var(--blue);outline-offset:2px}
+  :root[data-theme="dark"] .refcode span{color:var(--dim)}
+  :root[data-theme="dark"] .refcode input{color:var(--text)}
   @media(max-width:520px){.reflink{flex-direction:column}.reflink button{width:100%}}
   :root[data-theme="dark"] .refrule,:root[data-theme="dark"] .refnote,:root[data-theme="dark"] .lb.ref .st{color:var(--dim)}
   :root[data-theme="dark"] .refrule b{color:var(--text)}
@@ -519,6 +525,10 @@
     <div class="body">
       <div class="head"><h2>Invite friends</h2><span class="mono" id="refCount"></span></div>
       <p class="refrule" id="refRule"></p>
+      <div class="reflink" id="refPickRow" hidden>
+        <label class="refcode"><span id="refPre">caglorie.com/r/</span><input id="refCode" maxlength="15" placeholder="yourname" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Pick your invite link"></label>
+        <button class="eat" id="refPickBtn" type="button">Create link</button>
+      </div>
       <div class="reflink" id="refLinkRow" hidden>
         <input id="refLink" readonly aria-label="Your invite link">
         <button class="eat" id="refCopy" type="button">Copy link</button>
@@ -585,9 +595,9 @@
 <dialog id="inviteDlg">
   <div class="stripe pink"></div>
   <div class="body">
-    <div class="psst mono">YOU WERE INVITED</div>
-    <h2 id="inviteTitle">A friend sent you</h2>
-    <p id="inviteText"></p>
+    <div class="psst mono">WELCOME TO CAGLORIE</div>
+    <h2 id="inviteTitle">A friend invited you</h2>
+    <p id="inviteText">Confirm your invite and start feeding CAG.</p>
     <div class="dlgbtns">
       <button class="eat" id="inviteYes">Confirm invite</button>
       <button class="ghost" id="inviteNo">Skip</button>
@@ -869,6 +879,9 @@ async function init(){
   $('#histBtn').onclick=toggleHistory;
   $('#claimBtn').onclick=claimLast;
   $('#refCopy').onclick=copyRefLink;
+  $('#refPickBtn').onclick=pickRefCode;
+  $('#refCode').addEventListener('keydown', e=>{ if(e.key==='Enter') pickRefCode(); });
+  $('#refCode').addEventListener('input', e=>{ const v=e.target.value.toLowerCase().replace(/[^a-z0-9]/g,''); if(v!==e.target.value) e.target.value=v; });
   $('#refClaimAll').onclick=claimRefs;
   if(autoConnecting){
     const ok=await connect(true);
@@ -1262,7 +1275,7 @@ async function claimTask(){
 // ---------------- referrals: invite friends ----------------
 // Contrato aparte (CAGlorieReferrals). Solo LEE el juego: no cambia nada del juego ni del pozo.
 // Si REFERRALS esta vacio, la seccion no aparece y el juego sigue igual que antes.
-const REFERRALS = '0x9A7b84911070BBf4939eeaeEFF608425fb301416';   // <- pegar aca la direccion del contrato de referidos, entre las comillas
+const REFERRALS = '0x8ed37A4933BCfA73259a582a37C983540F680FC8';   // <- pegar aca la direccion del contrato de referidos, entre las comillas
 const REF_ABI = [
   'function register(address)',
   'function registerError(address,address) view returns (string)',
@@ -1272,7 +1285,11 @@ const REF_ABI = [
   'function invites(address) view returns (address referrer, uint32 week, bool paid)',
   'function paidCount(address) view returns (uint256)',
   'function claim(address,uint256)',
-  'function claimMany(address[],uint256[])'
+  'function claimMany(address[],uint256[])',
+  'function resolve(string) view returns (address)',
+  'function codeOf(address) view returns (string)',
+  'function codeError(address,string) view returns (string)',
+  'function setCode(string)'
 ];
 const REF_NONE = ethers.MaxUint256;
 let refRO = (REFERRALS && ethers.isAddress(REFERRALS)) ? new ethers.Contract(REFERRALS, REF_ABI, readOnly) : null, refW = null;
@@ -1281,16 +1298,26 @@ let refMine = null;   // mis invitados
 let refMem = null, inviteAsked = false, refClaiming = false;
 const REF_KEY = 'caglorie_ref';
 
-// ?ref=0x... en el link: se guarda, asi sobrevive a conectar la wallet y a recargar la pagina
+// El link de invitacion trae ?ref=codigo (caglorie.com/r/kenji redirige a caglorie.html?ref=kenji).
+// Tambien se acepta ?ref=0x... (wallet). Se guarda, asi sobrevive a conectar la wallet y a recargar.
+const CODE_RE = /^[a-z0-9]{3,15}$/;
+const refOk = r => !!r && (ethers.isAddress(r) || CODE_RE.test(r));
 function captureRef(){
   try{
-    const r = new URLSearchParams(location.search).get('ref');
-    if(r && ethers.isAddress(r)){ refMem = ethers.getAddress(r); try{ localStorage.setItem(REF_KEY, refMem); }catch(e){} }
+    let r = new URLSearchParams(location.search).get('ref');
+    if(r && !ethers.isAddress(r)) r = r.trim().toLowerCase();
+    if(refOk(r)){ refMem = r; try{ localStorage.setItem(REF_KEY, r); }catch(e){} }
   }catch(e){}
 }
 function pendingRef(){
   let r = refMem; try{ r = r || localStorage.getItem(REF_KEY); }catch(e){}
-  return r && ethers.isAddress(r) ? ethers.getAddress(r) : null;
+  return refOk(r) ? r : null;
+}
+// codigo -> wallet (null si el codigo no existe)
+async function resolveRef(r){
+  if(ethers.isAddress(r)) return ethers.getAddress(r);
+  const a = await refRO.resolve(r);
+  return a === ethers.ZeroAddress ? null : a;
 }
 function clearRef(){ refMem = null; try{ localStorage.removeItem(REF_KEY); }catch(e){} }
 
@@ -1304,7 +1331,7 @@ async function loadRefRules(){
 async function loadRefPlayer(){
   if(!refRO || !me) return;
   try{
-    const [n, pc] = await Promise.all([refRO.inviteCountOf(me), refRO.paidCount(me)]);
+    const [n, pc, code] = await Promise.all([refRO.inviteCountOf(me), refRO.paidCount(me), refRO.codeOf(me)]);
     const list = [];
     for(let off = 0; off < Number(n); off += 25){   // de a 25, asi la lectura nunca se hace pesada
       const page = await rpcTry(() => refRO.getInvites(me, off, 25));
@@ -1313,7 +1340,7 @@ async function loadRefPlayer(){
         pending: v.pendingWeek === REF_NONE ? null : Number(v.pendingWeek),
         now:Number(v.thisWeekCal), best:Number(v.bestCal) });
     }
-    refMine = { paidCount:Number(pc), list };
+    refMine = { paidCount:Number(pc), list, code };
   }catch(e){ console.warn('ref player', e); }
 }
 
@@ -1321,11 +1348,15 @@ async function loadRefPlayer(){
 // Una sola vez por visita. "Skip" lo descarta para siempre en este navegador.
 async function inviteGate(){
   if(!refRO || inviteAsked || !me || !state || !refW) return;
-  const ref = pendingRef(); if(!ref) return;
+  const raw = pendingRef(); if(!raw) return;
   if(state.alltime > 0){ clearRef(); return; }   // ya jugo: no puede ser invitado
   inviteAsked = true;
-  let err;
-  try{ err = await refRO.registerError(me, ref); }catch(e){ console.warn('ref check', e); return; }
+  let ref, err;
+  try{
+    ref = await resolveRef(raw);
+    if(!ref){ clearRef(); return; }              // ese codigo no es de nadie
+    err = await refRO.registerError(me, ref);
+  }catch(e){ console.warn('ref check', e); return; }
   if(err){ if(err !== 'referrals are paused') clearRef(); return; }
   let name = ''; try{ name = await game.names(ref); }catch(e){}
   if(!(await askInvite(name || short(ref)))){ clearRef(); return; }
@@ -1337,17 +1368,30 @@ async function inviteGate(){
 function askInvite(who){
   const dlg = $('#inviteDlg');
   $('#inviteTitle').textContent = `${who} invited you`;
-  const th = REF ? REF.threshold.toLocaleString() : '10,000', rw = REF ? fmtCag(REF.reward) : '2,000';
-  $('#inviteText').innerHTML = `Confirm it before your first meal. Reach <b>${th} cal</b> in a week and your friend gets <b>${rw} $CAG</b>.`;
   dlg.showModal();
   return new Promise(res=>{ const done=v=>{ dlg.close(); res(v); };
     $('#inviteYes').onclick=()=>done(true); $('#inviteNo').onclick=()=>done(false);
     dlg.oncancel=e=>{ e.preventDefault(); done(false); }; });
 }
 
-function refUrl(){
-  const base = /^https?:$/.test(location.protocol) ? location.origin + location.pathname : 'https://www.caglorie.com/caglorie.html';
-  return `${base}?ref=${me}`;
+const refOrigin = () => /^https?:$/.test(location.protocol) ? location.origin : 'https://www.caglorie.com';
+function refUrl(){ return refMine && refMine.code ? `${refOrigin()}/r/${refMine.code}` : ''; }
+// Elegir el link propio: una vez por wallet, primero que llega se lo queda
+let refPicking = false;
+async function pickRefCode(){
+  if(refPicking || !refW) return;
+  const inp = $('#refCode'), code = inp.value.trim().toLowerCase();
+  inp.value = code;
+  if(!CODE_RE.test(code)){ toast('3 to 15 letters or numbers, no spaces'); inp.focus(); return; }
+  refPicking = true; render();
+  try{
+    const err = await refRO.codeError(me, code);
+    if(err){ toast(err === 'that link is taken' ? `"${code}" is taken, try another` : err); return; }
+    await sendTx('Creating your link', () => refW.setCode(code));
+    if(refMine) refMine.code = code;
+    toast('Your link is ready · copy it and share');
+  }catch(e){ toast(errMsg(e)); }
+  finally{ refPicking = false; render(); }
 }
 async function copyRefLink(){
   const u = refUrl();
@@ -1374,14 +1418,19 @@ function renderRef(){
     return;
   }
   const played = state.alltime > 0;
-  $('#refLinkRow').hidden = !played;
+  if(!refMine){ $('#refLinkRow').hidden = true; $('#refPickRow').hidden = true; setText(note, 'Loading your invites…'); return; }
+  const hasCode = !!refMine.code;
+  $('#refLinkRow').hidden = !(played && hasCode);
+  $('#refPickRow').hidden = !(played && !hasCode);
   const l = $('#refLink'); if(l.value !== refUrl()) l.value = refUrl();
-  if(!refMine){ setText(note, 'Loading your invites…'); return; }
+  setText($('#refPre'), refOrigin().replace(/^https?:\/\/(www\.)?/, '') + '/r/');
+  const pb = $('#refPickBtn'); pb.disabled = refPicking; setText(pb, refPicking ? 'Creating…' : 'Create link');
   setText($('#refCount'), `${refMine.paidCount}/${REF.maxPaid} paid`);
   const { ready, pay, left } = refReady();
   let msg = '';
   if(REF.paused) msg = 'Invites are paused for now.';
   else if(!played) msg = 'Feed CAG once to unlock your invite link.';
+  else if(!hasCode && !refMine.list.length) msg = 'Pick your link: 3 to 15 letters or numbers. It can\'t be changed later.';
   else if(!refMine.list.length) msg = 'Nobody joined with your link yet. Rewards count from Monday, once the week closes.';
   else if(ready.length && !left) msg = `You reached the limit of ${REF.maxPaid} paid friends.`;
   else if(ready.length && !pay.length) msg = 'Rewards ready · the fund is being refilled, try again soon.';
