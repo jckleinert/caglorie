@@ -1124,9 +1124,21 @@ async function refreshTask(){
 }
 // por contrato, posteo y wallet: cada contrato nuevo vuelve a numerar los posteos desde 1
 const taskKey = () => `caglorie_task_${CONTRACT}_${TASK?TASK.id:0}_${(me||'').toLowerCase()}`.toLowerCase();
+// Al tocar "RT this post" se anota la hora. Claim se habilita recien 15 s despues: el que va a
+// X y da el RT ni lo nota; el que vuelve enseguida tiene que esperar. (No se chequea el RT.)
+const TASK_WAIT_MS = 15000;
 let taskOpenedMem = {};
-function taskOpened(){ if(taskOpenedMem[taskKey()]) return true; try{ return localStorage.getItem(taskKey())==='1'; }catch(e){ return false; } }
-function markTaskOpened(){ taskOpenedMem[taskKey()] = true; try{ localStorage.setItem(taskKey(),'1'); }catch(e){} }
+function taskOpenedAt(){
+  const k = taskKey(); if(taskOpenedMem[k]) return taskOpenedMem[k];
+  try{ const v = localStorage.getItem(k); if(!v) return 0; return v === '1' ? 1 : (Number(v) || 1); }catch(e){ return 0; }
+}
+function taskOpened(){ return taskOpenedAt() > 0; }
+function taskWaitLeft(){ const t = taskOpenedAt(); return t ? Math.max(0, TASK_WAIT_MS - (Date.now() - t)) : TASK_WAIT_MS; }
+function taskReady(){ return taskOpened() && taskWaitLeft() === 0; }
+function markTaskOpened(){
+  if(taskOpened()) return;   // tocarlo de nuevo no reinicia la espera
+  const k = taskKey(), t = Date.now(); taskOpenedMem[k] = t; try{ localStorage.setItem(k, String(t)); }catch(e){}
+}
 
 function buildTask(){
   const host = $('#task'); if(!host) return;
@@ -1158,19 +1170,19 @@ function renderTask(){
   const el = $('#food-task'); if(!TASK || !el) return;
   if(me && state && !state.task) return;   // dato aun no cargado: dejar la tarjeta como esta
   const s = state?.task || { done:false, can:false };
-  const opened = taskOpened(), done = !!me && s.done;
+  const opened = taskOpened(), done = !!me && s.done, wait = opened ? taskWaitLeft() : 0;
   el.classList.toggle('done', done);
   el.querySelector('[data-bar]').style.width = done ? '100%' : (opened ? '50%' : '0%');
   setText(el.querySelector('[data-status]'), done ? 'Eaten · wait for the next post' : (opened ? 'Step 2 of 2 · claim it' : 'Step 1 of 2 · RT the post'));
   el.querySelector('[data-open]').hidden = done;
   const btn = el.querySelector('[data-eat]');
-  btn.disabled = !!eating.task || done || !opened || (!!me && !s.can);
-  setHTML(btn, eating.task ? 'Nom nom…' : (done ? 'Eaten ✓' : 'Claim Cookie'));
+  btn.disabled = !!eating.task || done || !opened || wait > 0 || (!!me && !s.can);
+  setHTML(btn, eating.task ? 'Nom nom…' : (done ? 'Eaten ✓' : (wait > 0 ? `Claim unlocks in ${Math.ceil(wait/1000)}s` : 'Claim Cookie')));
   setText(el.querySelector('[data-hint]'), done ? 'A new post brings a new Cookie' : (opened ? '' : 'RT the post first'));
 }
 async function claimTask(){
   const t = TASK; if(!t) return;
-  const s = state?.task; if(!s || s.done || !s.can || !taskOpened()) return;
+  const s = state?.task; if(!s || s.done || !s.can || !taskReady()) return;
   eating.task = true; render();
   try{
     const rc = await sendTx('Eating the Cookie', () => gameW.claimTask(), $('#food-task'));
