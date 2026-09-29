@@ -1123,14 +1123,15 @@ async function refreshTask(){
   await loadTaskPlayer();
 }
 // por contrato, posteo y wallet: cada contrato nuevo vuelve a numerar los posteos desde 1
-const taskKey = () => `caglorie_task_${CONTRACT}_${TASK?TASK.id:0}_${(me||'').toLowerCase()}`.toLowerCase();
+// ("rt_": clave nueva desde la espera de 15 s, asi las marcas viejas sin hora no se saltean la cuenta)
+const taskKey = () => `caglorie_rt_${CONTRACT}_${TASK?TASK.id:0}_${(me||'').toLowerCase()}`.toLowerCase();
 // Al tocar "RT this post" se anota la hora. Claim se habilita recien 15 s despues: el que va a
 // X y da el RT ni lo nota; el que vuelve enseguida tiene que esperar. (No se chequea el RT.)
 const TASK_WAIT_MS = 15000;
 let taskOpenedMem = {};
 function taskOpenedAt(){
   const k = taskKey(); if(taskOpenedMem[k]) return taskOpenedMem[k];
-  try{ const v = localStorage.getItem(k); if(!v) return 0; return v === '1' ? 1 : (Number(v) || 1); }catch(e){ return 0; }
+  try{ const v = Number(localStorage.getItem(k)); return v > 0 ? v : 0; }catch(e){ return 0; }
 }
 function taskOpened(){ return taskOpenedAt() > 0; }
 function taskWaitLeft(){ const t = taskOpenedAt(); return t ? Math.max(0, TASK_WAIT_MS - (Date.now() - t)) : TASK_WAIT_MS; }
