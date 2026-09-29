@@ -1292,7 +1292,9 @@ const REF_ABI = [
   'function setCode(string)'
 ];
 const REF_NONE = ethers.MaxUint256;
-let refRO = (REFERRALS && ethers.isAddress(REFERRALS)) ? new ethers.Contract(REFERRALS, REF_ABI, readOnly) : null, refW = null;
+// Conexion propia, sin agrupar pedidos: el RPC publico de Ronin rechaza (error 400) varios pedidos juntos.
+const refProvider = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { batchMaxCount:1, staticNetwork:true });
+let refRO = (REFERRALS && ethers.isAddress(REFERRALS)) ? new ethers.Contract(REFERRALS, REF_ABI, refProvider) : null, refW = null;
 let REF = null;       // reglas: premio, calorias, tope, fondo
 let refMine = null;   // mis invitados
 let refMem = null, inviteAsked = false, refClaiming = false;
@@ -1324,14 +1326,17 @@ function clearRef(){ refMem = null; try{ localStorage.removeItem(REF_KEY); }catc
 async function loadRefRules(){
   if(!refRO) return;
   try{
-    const r = await refRO.getRules();
+    const r = await rpcTry(() => refRO.getRules());
     REF = { reward:r._reward, threshold:Number(r._threshold), maxPaid:Number(r._maxPaid), paused:r._paused, fund:r._fund, review:Number(r._reviewWeeks) };
   }catch(e){ console.warn('ref rules', e); }
 }
 async function loadRefPlayer(){
   if(!refRO || !me) return;
   try{
-    const [n, pc, code] = await Promise.all([refRO.inviteCountOf(me), refRO.paidCount(me), refRO.codeOf(me)]);
+    // de a una lectura, con reintento
+    const n = await rpcTry(() => refRO.inviteCountOf(me));
+    const pc = await rpcTry(() => refRO.paidCount(me));
+    const code = await rpcTry(() => refRO.codeOf(me));
     const list = [];
     for(let off = 0; off < Number(n); off += 25){   // de a 25, asi la lectura nunca se hace pesada
       const page = await rpcTry(() => refRO.getInvites(me, off, 25));
@@ -1463,7 +1468,7 @@ async function claimRefs(){
       : refW.claimMany(pay.map(x => x.addr), pay.map(x => x.qWeek)));
     toast(`🎉 ${fmtCag(REF.reward * BigInt(pay.length))} $CAG claimed`);
     pay.forEach(x => x.paid = true); refMine.paidCount += pay.length;
-    await Promise.allSettled([loadRefRules(), loadPlayer()]);
+    await loadRefRules(); try{ await loadPlayer(); }catch(e){}
     setTimeout(()=>{ loadRefPlayer().then(render); }, 3000);   // el RPC publico puede ir un bloque atras
   }catch(e){ toast(errMsg(e)); }
   finally{ refClaiming = false; render(); }
