@@ -66,6 +66,7 @@ table input{padding:6px 8px;border-radius:9px;border:2px solid var(--ink);width:
   <button data-tab="drinks">Drinks</button>
   <button data-tab="task">Daily task</button>
   <button data-tab="pool">Prize pool</button>
+  <button data-tab="refs">Referrals</button>
   <button data-tab="advanced">Advanced</button>
 </div>
 
@@ -84,6 +85,7 @@ table input{padding:6px 8px;border-radius:9px;border:2px solid var(--ink);width:
 <section class="tab" id="tab-drinks"><div id="drinksPanel"></div></section>
 <section class="tab" id="tab-task"><div id="taskPanel"></div></section>
 <section class="tab" id="tab-pool"><div id="poolPanel"></div></section>
+<section class="tab" id="tab-refs"><div id="refsPanel"></div></section>
 <section class="tab" id="tab-advanced"><div id="advPanel"></div></section>
 
 </div>
@@ -111,6 +113,7 @@ if(CHAIN_ID!==2020) $('#net').classList.add('test');
 $$('.tabs button').forEach(b=>b.onclick=()=>{
   $$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
   $$('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+b.dataset.tab));
+  if(b.dataset.tab==='refs' && !refs) reloadRefs();   // se lee recien al abrir la pestaña
 });
 
 // ============================================================ carga general
@@ -182,7 +185,7 @@ async function loadCollab(){
 }
 
 // ================================================================== render
-function render(){ renderWeek(); renderEaten(); renderFood(); renderDrinks(); renderTask(); renderPool(); renderAdv(); }
+function render(){ renderWeek(); renderEaten(); renderFood(); renderDrinks(); renderTask(); renderPool(); renderAdv(); renderRefs(); }
 const locked=()=>!signer||!isOwner;
 const lockNote=()=>locked()?'<div class="warn">Connect the owner wallet to use these buttons.</div>':'';
 
@@ -678,6 +681,212 @@ function renderAdv(){
   $('#adBtn').onclick=()=>{ if(!confirm('Change the treasury and NFT addresses?')) return; tx('Saving the addresses',()=>gameW.setAddresses(txt('#adTre'),txt('#adNft'))); };
 }
 
+// -------------------------------------------------------------- referidos
+// Contrato aparte (CAGlorieReferrals): paga al que invita cuando su invitado hace el minimo de
+// calorias en UNA semana (ya cerrada). Tiene su propio fondo de $CAG, separado del pozo.
+const REFERRALS='0x8ed37A4933BCfA73259a582a37C983540F680FC8';   // <- pegar aca la direccion del contrato de referidos, entre las comillas
+const REF_ABI=[
+  'function owner() view returns (address)',
+  'function getRules() view returns (uint256 _reward, uint256 _threshold, uint256 _maxPaid, bool _paused, uint256 _fund, uint256 _invites, uint256 _totalPaid, uint256 _reviewWeeks)',
+  'function inviteCountOf(address) view returns (uint256)',
+  'function getAllInvites(uint256,uint256) view returns (address[] players, address[] referrers, uint256[] weeks_, bool[] paid)',
+  'function getInvites(address,uint256,uint256) view returns (tuple(address player, string name, bool paid, uint256 qWeek, uint256 pendingWeek, uint256 thisWeekCal, uint256 bestCal)[])',
+  'function paidCount(address) view returns (uint256)',
+  'function blocked(address) view returns (bool)',
+  'function setRules(uint256,uint256,uint256,uint256)',
+  'function setPaused(bool)',
+  'function setBlocked(address,bool)',
+  'function withdraw(uint256)',
+  'function codeOf(address) view returns (string)',
+  'function resolve(string) view returns (address)',
+  'function adminSetCode(address,string)',
+  'function adminClearCode(address)'
+];
+const CAG_SEND_ABI=['function transfer(address,uint256) returns (bool)'];
+let refs=null, isRefOwner=false;
+const refLocked=()=>!signer||!isRefOwner;
+async function reloadRefs(){
+  $('#refsPanel').innerHTML='<div class="panel muted">Reading the referrals contract…</div>';
+  await loadRefs(); renderRefs(); $('#msg').textContent='Done.';
+}
+async function loadRefs(){
+  if(!REFERRALS){ refs={missing:true}; return; }
+  try{
+    const c=new ethers.Contract(REFERRALS,REF_ABI,ro);
+    const r=await rpc(()=>c.getRules()), owner=await rpc(()=>c.owner());
+    if(!cagAddr) cagAddr=await rpc(()=>game.cag());
+    const n=Number(r._invites), all=[], byAddr={};
+    for(let off=0; off<n; off+=200){
+      $('#msg').textContent=`Reading invites ${off+1}–${Math.min(n,off+200)} of ${n}…`;
+      const pg=await rpc(()=>c.getAllInvites(off,200));
+      for(let i=0;i<pg.players.length;i++){
+        const x={addr:pg.players[i], ref:pg.referrers[i], week:Number(pg.weeks_[i]), paid:pg.paid[i], name:'', qWeek:null, pending:null, best:0, now:0};
+        all.push(x); byAddr[x.addr.toLowerCase()]=x;
+      }
+    }
+    // una lectura por cada wallet que invito: trae nombre, semana ganadora y calorias de sus invitados
+    const referrers=[...new Set(all.map(x=>x.ref))], info={};
+    for(let i=0;i<referrers.length;i++){
+      const a=referrers[i];
+      $('#msg').textContent=`Reading referrer ${i+1} of ${referrers.length}…`;
+      const cnt=Number(await rpc(()=>c.inviteCountOf(a)));
+      for(let off=0; off<cnt; off+=50){
+        const g=await rpc(()=>c.getInvites(a,off,50));
+        for(const v of g){ const x=byAddr[v.player.toLowerCase()]; if(!x) continue;
+          x.name=v.name; x.qWeek=v.qWeek===ethers.MaxUint256?null:Number(v.qWeek);
+          x.pending=v.pendingWeek===ethers.MaxUint256?null:Number(v.pendingWeek);
+          x.best=Number(v.bestCal); x.now=Number(v.thisWeekCal); }
+      }
+      info[a]={ name:await rpc(()=>game.names(a)), blocked:await rpc(()=>c.blocked(a)), code:await rpc(()=>c.codeOf(a)),
+                paidCount:Number(await rpc(()=>c.paidCount(a))), banned:await rpc(()=>game.banned(a)) };
+    }
+    const maxPaid=Number(r._maxPaid);
+    // listos para cobrar, respetando el tope de cada wallet que invito
+    let ready=0;
+    for(const a of referrers){
+      const inf=info[a]; if(inf.blocked||inf.banned) continue;
+      const k=all.filter(x=>x.ref===a && !x.paid && x.qWeek!==null).length;
+      ready+=Math.min(k, Math.max(0,maxPaid-inf.paidCount));
+    }
+    const review=all.filter(x=>!x.paid && x.qWeek===null && x.pending!==null).length;
+    refs={owner, reward:r._reward, threshold:Number(r._threshold), maxPaid, paused:r._paused, reviewWeeks:Number(r._reviewWeeks),
+          fund:r._fund, totalPaid:r._totalPaid, all:all.reverse(), info, ready, review};
+    if(me) isRefOwner=owner.toLowerCase()===me.toLowerCase();
+  }catch(e){ console.warn('refs',e); refs={error:(e.reason||e.shortMessage||e.message)}; }
+}
+function renderRefs(){
+  const host=$('#refsPanel'); if(!host) return;
+  if(!refs){ host.innerHTML='<div class="panel muted">Open this tab to read the referrals.</div>'; return; }
+  if(refs.missing){ host.innerHTML=`<div class="panel"><h3>No referrals contract yet</h3><div class="sub">Deploy <span class="mono">CAGlorieReferrals</span> and paste its address in <span class="mono">const REFERRALS=''</span> in this file and in caglorie.html.</div></div>`; return; }
+  if(refs.error){ host.innerHTML=`<div class="panel"><div class="muted">Could not read the referrals contract (${esc(refs.error)}).</div><button class="sm" id="rfRetry" style="margin-top:10px">Try again</button></div>`; $('#rfRetry').onclick=reloadRefs; return; }
+  const R=refs, dis=refLocked()?'disabled':'', need=R.reward*BigInt(R.ready);
+  const short=a=>a.slice(0,6)+'…'+a.slice(-4);
+  const who=(name,a)=>`${name?`<b>${esc(name)}</b> `:''}<a class="mono" href="https://app.roninchain.com/address/${a}" target="_blank" rel="noopener">${short(a)}</a>`;
+  const status=x=>x.paid?'<span class="tag ok">PAID</span>'
+    : x.qWeek!==null?`<span class="tag ctr">READY · week ${x.qWeek}</span>`
+    : x.pending!==null?`<span class="tag">IN REVIEW · week ${x.pending}</span>`
+    : `<span class="tag">playing</span> <span class="muted mono">${x.now.toLocaleString('en-US')} this week</span>`;
+  host.innerHTML=`
+    <div class="cards">
+      <div class="card"><div class="k">REFERRAL FUND</div><div class="v">${fmt(R.fund)} $CAG</div></div>
+      <div class="card"><div class="k">READY TO CLAIM</div><div class="v">${R.ready} · ${fmt(need)} $CAG</div></div>
+      <div class="card"><div class="k">IN REVIEW</div><div class="v">${R.review}</div></div>
+      <div class="card"><div class="k">PAID OUT</div><div class="v">${fmt(R.totalPaid)} $CAG</div></div>
+      <div class="card"><div class="k">INVITES</div><div class="v">${R.all.length}</div></div>
+      <div class="card"><div class="k">STATUS</div><div class="v">${R.paused?'⏸ paused':'✓ active'}</div></div>
+    </div>
+    ${R.fund<need?`<div class="warn" style="margin:0 0 14px">The fund can't cover what's ready to claim. Top it up with at least <b>${fmt(need-R.fund)} $CAG</b>.</div>`:''}
+
+    <div class="panel">
+      <h3>Fund</h3>
+      <div class="sub">Separate from the prize pool. Sending $CAG here is one plain transfer, no approval needed.</div>
+      <div class="row">
+        <label>Send</label><input id="rfFund" type="number" min="0" step="1000" placeholder="1000000" style="width:160px" ${dis}><span class="muted">$CAG</span>
+        <button class="p" id="rfFundBtn" ${dis}>Send to the fund</button>
+      </div>
+      <div class="row">
+        <label>Take back</label><input id="rfWd" type="number" min="0" step="1000" style="width:160px" ${dis}><span class="muted">$CAG · to the owner wallet</span>
+        <button class="d" id="rfWdBtn" ${dis}>Withdraw</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Rules</h3>
+      <div class="sub">A week that reaches the calories can be claimed once it's over plus the review weeks. That gap is your time to ban a cheater before anything is paid: use the IN REVIEW list below. Changing a rule affects every reward not paid yet.</div>
+      <div class="row">
+        <label>Reward</label><input id="rfReward" type="number" min="1" value="${cag(R.reward)}" style="width:120px" ${dis}><span class="muted">$CAG</span>
+        <label>Calories in one week</label><input id="rfTh" type="number" min="1" value="${R.threshold}" style="width:110px" ${dis}>
+        <label>Max paid per wallet</label><input id="rfMax" type="number" min="1" value="${R.maxPaid}" style="width:80px" ${dis}>
+        <label>Review weeks</label><input id="rfRev" type="number" min="0" max="4" value="${R.reviewWeeks}" style="width:70px" ${dis}>
+        <button class="sm" id="rfRulesBtn" ${dis}>Save</button>
+      </div>
+      <div class="actions">
+        <span class="tag ${R.paused?'no':'ok'}">${R.paused?'PAUSED':'ACTIVE'}</span>
+        <button class="sm ${R.paused?'p':'d'}" id="rfPauseBtn" ${dis}>${R.paused?'Resume':'Pause'}</button>
+        <span class="muted">${R.paused?'Nobody can confirm invites or claim rewards.':'Pausing stops new invites and claims. Nothing is lost.'}</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Block a wallet</h3>
+      <div class="sub">A blocked wallet can't invite, be invited or get paid. It can still play. Game bans count too.</div>
+      <div class="row">
+        <input id="rfBlockAddr" class="mono" placeholder="0x…" style="width:380px;max-width:100%" ${dis}>
+        <button class="sm d" id="rfBlockBtn" ${dis}>Block</button>
+        <button class="sm" id="rfUnblockBtn" ${dis}>Unblock</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Invite links</h3>
+      <div class="sub">Each player picks their own link once (caglorie.com/r/name), first come first served. Here you can hand a specific one to a wallet (a partner, a streamer) or free one that shouldn't exist. A freed link stops working and anyone can take it.</div>
+      <div class="row">
+        <label>Look up</label><input id="rfLookCode" class="mono" placeholder="kenji" style="width:160px">
+        <button class="sm" id="rfLookBtn">Who has it?</button>
+        <span class="muted mono" id="rfLookOut"></span>
+      </div>
+      <div class="row">
+        <label>Wallet</label><input id="rfCodeAddr" class="mono" placeholder="0x…" style="width:340px;max-width:100%" ${dis}>
+        <label>Link</label><input id="rfCodeVal" class="mono" placeholder="kenji" maxlength="15" style="width:140px" ${dis}>
+        <button class="sm p" id="rfCodeSet" ${dis}>Give this link</button>
+        <button class="sm d" id="rfCodeClear" ${dis}>Free its link</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:10px"><button class="sm" id="rfReload">Reload</button><span class="muted">Newest invites first.</span></div>
+    <table><thead><tr><th>Invited player</th><th>Invited by</th><th class="r">Since week</th><th class="r">Best closed week</th><th>Status</th></tr></thead><tbody>
+    ${R.all.map(x=>{ const inf=R.info[x.ref]||{};
+      return `<tr class="${x.paid?'':x.qWeek!==null?'':'unq'}">
+        <td>${who(x.name,x.addr)}</td>
+        <td>${who(inf.name,x.ref)}${inf.code?` <span class="tag">/r/${esc(inf.code)}</span>`:''} <span class="muted mono">${inf.paidCount??0}/${R.maxPaid}</span>${inf.blocked?'<span class="tag no">BLOCKED</span>':''}${inf.banned?'<span class="tag no">BANNED</span>':''}</td>
+        <td class="r mono">${x.week}</td>
+        <td class="r mono">${x.best.toLocaleString('en-US')}</td>
+        <td>${status(x)}</td></tr>`; }).join('') || '<tr><td colspan="5">No invites yet.</td></tr>'}
+    </tbody></table>
+    ${refLocked()?'<div class="warn">Connect the wallet that deployed the referrals contract to use these buttons.</div>':''}`;
+  $('#rfReload').onclick=reloadRefs;
+  $('#rfLookBtn').onclick=async()=>{ const code=txt('#rfLookCode').toLowerCase(), out=$('#rfLookOut');
+    if(!/^[a-z0-9]{3,15}$/.test(code)){ out.textContent='3-15 letters or numbers'; return; }
+    try{ const a=await rpc(()=>new ethers.Contract(REFERRALS,REF_ABI,ro).resolve(code));
+      if(a===ethers.ZeroAddress){ out.textContent='free · nobody has it'; return; }
+      const n=await rpc(()=>game.names(a)); out.textContent=`${n?n+' · ':''}${a}`; }
+    catch(e){ out.textContent='Error: '+(e.reason||e.shortMessage||e.message); } };
+  if(refLocked()) return;
+  $('#rfCodeSet').onclick=()=>{ const a=txt('#rfCodeAddr'), code=txt('#rfCodeVal').toLowerCase();
+    if(!ethers.isAddress(a)) return alert('That is not a valid address');
+    if(!/^[a-z0-9]{3,15}$/.test(code)) return alert('The link: 3 to 15 letters or numbers, no spaces');
+    if(!confirm(`Give /r/${code} to ${a}? If it had another link, that one is freed.`)) return;
+    refTx('Giving the link',()=>refW().adminSetCode(a,code)); };
+  $('#rfCodeClear').onclick=()=>{ const a=txt('#rfCodeAddr');
+    if(!ethers.isAddress(a)) return alert('Paste the wallet whose link you want to free');
+    if(!confirm(`Free the link of ${a}? It stops working and anyone can take it.`)) return;
+    refTx('Freeing the link',()=>refW().adminClearCode(a)); };
+  const wei=n=>ethers.parseUnits(String(n),18);
+  $('#rfFundBtn').onclick=()=>{ const n=val('#rfFund'); if(!(n>0)) return alert('Enter an amount');
+    if(!confirm(`Send ${n.toLocaleString('en-US')} $CAG to the referral fund?`)) return;
+    refTx('Sending $CAG to the referral fund',()=>new ethers.Contract(cagAddr,CAG_SEND_ABI,signer).transfer(REFERRALS,wei(n))); };
+  $('#rfWdBtn').onclick=()=>{ const n=val('#rfWd'); if(!(n>0)) return alert('Enter an amount');
+    if(!confirm(`Take ${n.toLocaleString('en-US')} $CAG back from the referral fund?`)) return;
+    refTx('Withdrawing from the referral fund',()=>refW().withdraw(wei(n))); };
+  $('#rfRulesBtn').onclick=()=>{ const rw=val('#rfReward'), th=val('#rfTh'), mx=val('#rfMax'), rv=val('#rfRev');
+    if(!(rw>0&&th>0&&mx>0&&Number.isInteger(th)&&Number.isInteger(mx))) return alert('Reward, calories and max must be whole numbers above 0');
+    if(!(Number.isInteger(rv)&&rv>=0&&rv<=4)) return alert('Review weeks: a whole number from 0 to 4');
+    if(!confirm(`New rules: ${rw.toLocaleString('en-US')} $CAG per friend who makes ${th.toLocaleString('en-US')} cal in one week, up to ${mx} per wallet, ${rv} review week(s)?`)) return;
+    refTx('Saving the referral rules',()=>refW().setRules(wei(rw),th,mx,rv)); };
+  $('#rfPauseBtn').onclick=()=>refTx(R.paused?'Resuming referrals':'Pausing referrals',()=>refW().setPaused(!R.paused));
+  const block=v=>{ const a=txt('#rfBlockAddr'); if(!ethers.isAddress(a)) return alert('That is not a valid address');
+    refTx(v?'Blocking':'Unblocking',()=>refW().setBlocked(a,v)); };
+  $('#rfBlockBtn').onclick=()=>block(true); $('#rfUnblockBtn').onclick=()=>block(false);
+}
+const refW=()=>new ethers.Contract(REFERRALS,REF_ABI,signer);
+async function refTx(label,fn){
+  try{
+    $('#msg').textContent=label+' · confirm in wallet…';
+    const t=await fn(); $('#msg').textContent='Waiting for Ronin…'; await t.wait();
+    await reloadRefs();
+  }catch(e){ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); }
+}
+
 // ================================================================ acciones
 async function tx(label, fn, reload=true){
   try{
@@ -747,7 +956,8 @@ async function connect(){
   const p=new ethers.BrowserProvider(inj); signer=await p.getSigner(); me=ethers.getAddress(accounts[0]); gameW=game.connect(signer);
   isOwner=(await rpc(()=>game.owner())).toLowerCase()===me.toLowerCase();
   $('#connect').textContent=me.slice(0,6)+'…'+me.slice(-4)+(isOwner?' (owner)':' (NOT owner)');
-  if(data) render();
+  if(refs && refs.owner) isRefOwner=refs.owner.toLowerCase()===me.toLowerCase();
+  if(data) render(); else renderRefs();
 }
 $('#load').onclick=()=>load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
 $('#csv').onclick=csv; $('#connect').onclick=connect;

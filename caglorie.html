@@ -419,6 +419,34 @@
   .card.collab.task.done .cart,.card.collab.task.done .cprog{opacity:.5}
   .menu.gated ~ #task .card{filter:grayscale(1) brightness(.8);pointer-events:none}
   :root[data-theme="dark"] .card.collab.task .cact .btnlink{background:var(--text);color:var(--ink)}
+  /* referrals: invite friends */
+  .lb.ref .stripe{background:repeating-linear-gradient(90deg,var(--logo-blue) 0 20px,var(--paper) 20px 40px)}
+  .refrule{margin:0 0 12px;color:#5b6172}
+  .refrule b{color:var(--ink)}
+  .reflink{display:flex;gap:10px;align-items:stretch}
+  .reflink input{flex:1;min-width:0;font:inherit;font-family:'Space Mono',monospace;font-size:12px;padding:10px 12px;border:var(--stroke);border-radius:12px;background:var(--cream);color:var(--ink)}
+  .reflink button{width:auto;flex:0 0 auto;padding:10px 18px}
+  .refnote{margin-top:10px;color:#5b6172}
+  .lb.ref ol{margin-top:10px}
+  .lb.ref li.refrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+  .lb.ref li.refrow .bar{grid-column:1/-1;height:8px}
+  .lb.ref li.refrow .bar i{background:var(--logo-blue)}
+  .lb.ref .st{font-family:'Space Mono',monospace;font-size:12px;color:#5b6172;text-align:right;white-space:nowrap}
+  .lb.ref .st.ok{color:var(--grass);font-weight:700}
+  .lb.ref .st.go{color:var(--logo-pink);font-weight:700}
+  #refClaimAll{margin-top:12px}
+  .refcode{flex:1;min-width:0;display:flex;align-items:center;border:var(--stroke);border-radius:12px;background:var(--cream);padding-left:12px}
+  .refcode span{font-family:'Space Mono',monospace;font-size:12px;color:#5b6172;white-space:nowrap}
+  .refcode input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;padding:10px 12px 10px 1px;color:var(--ink);outline:none}
+  .refcode:focus-within{outline:3px solid var(--blue);outline-offset:2px}
+  :root[data-theme="dark"] .refcode span{color:var(--dim)}
+  :root[data-theme="dark"] .refcode input{color:var(--text)}
+  @media(max-width:520px){.reflink{flex-direction:column}.reflink button{width:100%}}
+  :root[data-theme="dark"] .refrule,:root[data-theme="dark"] .refnote,:root[data-theme="dark"] .lb.ref .st{color:var(--dim)}
+  :root[data-theme="dark"] .refrule b{color:var(--text)}
+  :root[data-theme="dark"] .reflink input{color:var(--text)}
+  :root[data-theme="dark"] .lb.ref .st.ok{color:var(--grass)}
+  :root[data-theme="dark"] .lb.ref .st.go{color:var(--logo-pink)}
 </style>
 <script>
 (function(){try{if(localStorage.getItem('caglorie_theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();
@@ -492,6 +520,26 @@
     </div>
   </section>
 
+  <section class="lb ref" id="refBox" hidden>
+    <div class="stripe"></div>
+    <div class="body">
+      <div class="head"><h2>Invite friends</h2><span class="mono" id="refCount"></span></div>
+      <p class="refrule" id="refRule"></p>
+      <div class="reflink" id="refPickRow" hidden>
+        <label class="refcode"><span id="refPre">caglorie.com/r/</span><input id="refCode" maxlength="15" placeholder="yourname" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Pick your invite link"></label>
+        <button class="eat" id="refPickBtn" type="button">Create link</button>
+      </div>
+      <div class="reflink" id="refLinkRow" hidden>
+        <input id="refLink" readonly aria-label="Your invite link">
+        <button class="eat" id="refCopy" type="button">Copy link</button>
+      </div>
+      <div class="refnote mono" id="refNote"></div>
+      <ol id="refList"></ol>
+      <div class="pager" id="refPager" hidden></div>
+      <button class="eat claim" id="refClaimAll" type="button" hidden>Claim</button>
+    </div>
+  </section>
+
   <div class="dev"><button id="toggleSound">Sound: on</button>
       <button class="themetoggle" id="themeBtn" type="button" role="switch" aria-checked="false" aria-label="Dark mode" title="Switch to dark mode">
         <span class="tt-track" aria-hidden="true">
@@ -541,6 +589,19 @@
     <div class="dlgbtns">
       <a class="buy btnlink" href="https://marketplace.roninchain.com/collections/cag" target="_blank" rel="noopener">Get one on Ronin Market ↗</a>
       <button class="ghost" id="nftNo">Not now</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="inviteDlg">
+  <div class="stripe pink"></div>
+  <div class="body">
+    <div class="psst mono">WELCOME TO CAGLORIE</div>
+    <h2 id="inviteTitle">A friend invited you</h2>
+    <p id="inviteText">Confirm your invite and start feeding CAG.</p>
+    <div class="dlgbtns">
+      <button class="eat" id="inviteYes">Confirm invite</button>
+      <button class="ghost" id="inviteNo">Skip</button>
     </div>
   </div>
 </dialog>
@@ -645,11 +706,13 @@ async function connect(silent=false){
     provider=new ethers.BrowserProvider(inj); signer=await provider.getSigner(); me=ethers.getAddress(accounts[0]);
     gameW=game.connect(signer); cagW=new ethers.Contract(CAG_TOKEN, ERC20_ABI, signer);
     if(drinkRO) drinkW=drinkRO.connect(signer);
+    if(refRO) refW=refRO.connect(signer);
     inj.on?.('accountsChanged', ()=>location.reload()); inj.on?.('chainChanged', ()=>location.reload());
     localStorage.setItem('caglorie_connected','1');
-    await loadPlayer(); await loadCollabPlayer(); await loadDrinkPlayer(); await loadTaskPlayer();
+    await loadPlayer(); await loadCollabPlayer(); await loadDrinkPlayer(); await loadTaskPlayer(); await loadRefPlayer();
     try{ await loadLB(); }catch(e){ console.warn('lb', e); }   // la tabla, ahora sabiendo quien soy
     if(!state.name) await askName();
+    await inviteGate();   // si llego con un link de invitacion, se confirma antes de la primera comida
     render(); renderLB();
     return true;
   }catch(e){ if(!silent) toast(errMsg(e)); return false; }
@@ -791,7 +854,7 @@ async function settleAfterTx(stale){
 }
 async function refresh(){
   try{ await loadPlayer(); }catch(e){ console.warn('player', e); }
-  await Promise.allSettled([loadCollabPlayer(), loadDrinkPlayer(), refreshTask(), loadLB()]);
+  await Promise.allSettled([loadCollabPlayer(), loadDrinkPlayer(), refreshTask(), loadLB(), loadRefRules(), loadRefPlayer()]);
   render(); renderLB(); if(histOpen) loadHistory();
   // si colab o bebidas quedaron sin dato, un reintento corto antes del proximo ciclo de 30 s
   if(me && state && ((COLLAB && !state.collab) || (DRINKS.length && !state.drinks) || (TASK && !state.task))){
@@ -803,6 +866,8 @@ async function refresh(){
 
 async function init(){
   try{ autoConnecting=!!localStorage.getItem('caglorie_connected'); }catch(e){ autoConnecting=false; }
+  captureRef();
+  await loadRefRules();
   try{ await loadConfig(); await loadCollabConfig(); await loadDrinksConfig(); await loadTaskConfig(); await loadLB(); }
   catch(e){ toast('Could not reach Ronin: '+errMsg(e)); }
   buildMenu(); buildTask(); buildCollab(); buildDrinks(); render(); renderLB();
@@ -814,6 +879,11 @@ async function init(){
   primeCanSound();
   $('#histBtn').onclick=toggleHistory;
   $('#claimBtn').onclick=claimLast;
+  $('#refCopy').onclick=copyRefLink;
+  $('#refPickBtn').onclick=pickRefCode;
+  $('#refCode').addEventListener('keydown', e=>{ if(e.key==='Enter') pickRefCode(); });
+  $('#refCode').addEventListener('input', e=>{ const v=e.target.value.toLowerCase().replace(/[^a-z0-9]/g,''); if(v!==e.target.value) e.target.value=v; });
+  $('#refClaimAll').onclick=claimRefs;
   if(autoConnecting){
     const ok=await connect(true);
     autoConnecting=false;
@@ -906,6 +976,7 @@ async function eatCollab(){
   const s=state?.collab; if(!s || !s.eligible) return;
   const rem = s.lastEaten ? Math.max(0, s.lastEaten+c.cooldown-now()) : 0;
   if(rem>0) return;
+  await inviteGate();
   eating.collab=true; render();
   try{
     const rc=await sendTx(`Eating ${c.name}`, ()=>gameW.feedCollab(), $('#food-collab'));
@@ -1058,6 +1129,7 @@ async function drinkNow(id){
   const d = DRINKS.find(x => Number(x.id) === Number(id)); if(!d) return;
   const s = (state?.drinks || {})[d.id]; if(!s || s.balance === 0 || drinksToday(d, s) === 0) return;
   if(!drinkW) drinkW = drinkRO.connect(signer);
+  await inviteGate();
   const key = 'drink'+d.id;
   eating[key] = true; render();
   try{
@@ -1184,6 +1256,7 @@ function renderTask(){
 async function claimTask(){
   const t = TASK; if(!t) return;
   const s = state?.task; if(!s || s.done || !s.can || !taskReady()) return;
+  await inviteGate();
   eating.task = true; render();
   try{
     const rc = await sendTx('Eating the Cookie', () => gameW.claimTask(), $('#food-task'));
@@ -1198,6 +1271,222 @@ async function claimTask(){
     await refresh();
     await settleAfterTx(() => { const x = state?.task; return !x || !x.done; });
   }catch(e){ eating.task = false; render(); toast(errMsg(e)); }
+}
+
+// ---------------- referrals: invite friends ----------------
+// Contrato aparte (CAGlorieReferrals). Solo LEE el juego: no cambia nada del juego ni del pozo.
+// Si REFERRALS esta vacio, la seccion no aparece y el juego sigue igual que antes.
+const REFERRALS = '0x8ed37A4933BCfA73259a582a37C983540F680FC8';   // <- pegar aca la direccion del contrato de referidos, entre las comillas
+const REF_ABI = [
+  'function register(address)',
+  'function registerError(address,address) view returns (string)',
+  'function getRules() view returns (uint256 _reward, uint256 _threshold, uint256 _maxPaid, bool _paused, uint256 _fund, uint256 _invites, uint256 _totalPaid, uint256 _reviewWeeks)',
+  'function inviteCountOf(address) view returns (uint256)',
+  'function getInvites(address,uint256,uint256) view returns (tuple(address player, string name, bool paid, uint256 qWeek, uint256 pendingWeek, uint256 thisWeekCal, uint256 bestCal)[])',
+  'function invites(address) view returns (address referrer, uint32 week, bool paid)',
+  'function paidCount(address) view returns (uint256)',
+  'function claim(address,uint256)',
+  'function claimMany(address[],uint256[])',
+  'function resolve(string) view returns (address)',
+  'function codeOf(address) view returns (string)',
+  'function codeError(address,string) view returns (string)',
+  'function setCode(string)'
+];
+const REF_NONE = ethers.MaxUint256;
+// Conexion propia, sin agrupar pedidos: el RPC publico de Ronin rechaza (error 400) varios pedidos juntos.
+const refProvider = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { batchMaxCount:1, staticNetwork:true });
+let refRO = (REFERRALS && ethers.isAddress(REFERRALS)) ? new ethers.Contract(REFERRALS, REF_ABI, refProvider) : null, refW = null;
+let REF = null;       // reglas: premio, calorias, tope, fondo
+let refMine = null;   // mis invitados
+let refMem = null, inviteAsked = false, refClaiming = false;
+const REF_PAGE = 5; let refPage = 0;   // invitados por pagina
+const REF_KEY = 'caglorie_ref';
+
+// El link de invitacion trae ?ref=codigo (caglorie.com/r/kenji redirige a caglorie.html?ref=kenji).
+// Tambien se acepta ?ref=0x... (wallet). Se guarda, asi sobrevive a conectar la wallet y a recargar.
+const CODE_RE = /^[a-z0-9]{3,15}$/;
+const refOk = r => !!r && (ethers.isAddress(r) || CODE_RE.test(r));
+function captureRef(){
+  try{
+    let r = new URLSearchParams(location.search).get('ref');
+    if(r && !ethers.isAddress(r)) r = r.trim().toLowerCase();
+    if(refOk(r)){ refMem = r; try{ localStorage.setItem(REF_KEY, r); }catch(e){} }
+  }catch(e){}
+}
+function pendingRef(){
+  let r = refMem; try{ r = r || localStorage.getItem(REF_KEY); }catch(e){}
+  return refOk(r) ? r : null;
+}
+// codigo -> wallet (null si el codigo no existe)
+async function resolveRef(r){
+  if(ethers.isAddress(r)) return ethers.getAddress(r);
+  const a = await refRO.resolve(r);
+  return a === ethers.ZeroAddress ? null : a;
+}
+function clearRef(){ refMem = null; try{ localStorage.removeItem(REF_KEY); }catch(e){} }
+
+async function loadRefRules(){
+  if(!refRO) return;
+  try{
+    const r = await rpcTry(() => refRO.getRules());
+    REF = { reward:r._reward, threshold:Number(r._threshold), maxPaid:Number(r._maxPaid), paused:r._paused, fund:r._fund, review:Number(r._reviewWeeks) };
+  }catch(e){ console.warn('ref rules', e); }
+}
+async function loadRefPlayer(){
+  if(!refRO || !me) return;
+  try{
+    // de a una lectura, con reintento
+    const n = await rpcTry(() => refRO.inviteCountOf(me));
+    const pc = await rpcTry(() => refRO.paidCount(me));
+    const code = await rpcTry(() => refRO.codeOf(me));
+    const list = [];
+    for(let off = 0; off < Number(n); off += 25){   // de a 25, asi la lectura nunca se hace pesada
+      const page = await rpcTry(() => refRO.getInvites(me, off, 25));
+      for(const v of page) list.push({ addr:v.player, name:v.name || short(v.player), paid:v.paid,
+        qWeek: v.qWeek === REF_NONE ? null : Number(v.qWeek),
+        pending: v.pendingWeek === REF_NONE ? null : Number(v.pendingWeek),
+        now:Number(v.thisWeekCal), best:Number(v.bestCal) });
+    }
+    refMine = { paidCount:Number(pc), list, code };
+  }catch(e){ console.warn('ref player', e); }
+}
+
+// Antes de la primera comida: si llego con el link de un amigo, se le pide confirmarlo.
+// Una sola vez por visita. "Skip" lo descarta para siempre en este navegador.
+async function inviteGate(){
+  if(!refRO || inviteAsked || !me || !state || !refW) return;
+  const raw = pendingRef(); if(!raw) return;
+  if(state.alltime > 0){ clearRef(); return; }   // ya jugo: no puede ser invitado
+  inviteAsked = true;
+  let ref, err;
+  try{
+    ref = await resolveRef(raw);
+    if(!ref){ clearRef(); return; }              // ese codigo no es de nadie
+    err = await refRO.registerError(me, ref);
+  }catch(e){ console.warn('ref check', e); return; }
+  if(err){ if(err !== 'referrals are paused') clearRef(); return; }
+  let name = ''; try{ name = await game.names(ref); }catch(e){}
+  if(!(await askInvite(name || short(ref)))){ clearRef(); return; }
+  try{
+    await sendTx('Confirming your invite', ()=>refW.register(ref));
+    clearRef(); toast('Invite confirmed · enjoy!');
+  }catch(e){ toast(errMsg(e)); }
+}
+function askInvite(who){
+  const dlg = $('#inviteDlg');
+  $('#inviteTitle').textContent = `${who} invited you`;
+  dlg.showModal();
+  return new Promise(res=>{ const done=v=>{ dlg.close(); res(v); };
+    $('#inviteYes').onclick=()=>done(true); $('#inviteNo').onclick=()=>done(false);
+    dlg.oncancel=e=>{ e.preventDefault(); done(false); }; });
+}
+
+const refOrigin = () => /^https?:$/.test(location.protocol) ? location.origin : 'https://www.caglorie.com';
+function refUrl(){ return refMine && refMine.code ? `${refOrigin()}/r/${refMine.code}` : ''; }
+// Elegir el link propio: una vez por wallet, primero que llega se lo queda
+let refPicking = false;
+async function pickRefCode(){
+  if(refPicking || !refW) return;
+  const inp = $('#refCode'), code = inp.value.trim().toLowerCase();
+  inp.value = code;
+  if(!CODE_RE.test(code)){ toast('3 to 15 letters or numbers, no spaces'); inp.focus(); return; }
+  refPicking = true; render();
+  try{
+    const err = await refRO.codeError(me, code);
+    if(err){ toast(err === 'that link is taken' ? `"${code}" is taken, try another` : err); return; }
+    await sendTx('Creating your link', () => refW.setCode(code));
+    if(refMine) refMine.code = code;
+    toast('Your link is ready · copy it and share');
+  }catch(e){ toast(errMsg(e)); }
+  finally{ refPicking = false; render(); }
+}
+async function copyRefLink(){
+  const u = refUrl();
+  try{ await navigator.clipboard.writeText(u); toast('Invite link copied'); }
+  catch(e){ const i=$('#refLink'); i.focus(); i.select(); try{ document.execCommand('copy'); toast('Invite link copied'); }catch(_){ toast('Select the link and copy it'); } }
+}
+// los que ya se pueden cobrar, sin pasarse del tope ni de lo que hay en el fondo
+function refReady(){
+  if(!REF || !refMine) return { ready:[], pay:[] };
+  const ready = refMine.list.filter(x => !x.paid && x.qWeek !== null);
+  const left = Math.max(0, REF.maxPaid - refMine.paidCount);
+  const byFund = REF.reward > 0n ? Number(REF.fund / REF.reward) : 0;
+  return { ready, pay: ready.slice(0, Math.min(left, byFund)), left };
+}
+function renderRef(){
+  const box = $('#refBox'); if(!box) return;
+  if(!refRO || !REF){ box.hidden = true; return; }
+  box.hidden = false;
+  setHTML($('#refRule'), `Get <b>${fmtCag(REF.reward)} $CAG</b> for each friend who reaches <b>${REF.threshold.toLocaleString()} cal</b> in one week. Up to ${REF.maxPaid} friends.`);
+  const note = $('#refNote'), list = $('#refList'), btn = $('#refClaimAll');
+  if(!me || !state){
+    $('#refLinkRow').hidden = true; setText($('#refCount'), ''); setHTML(list, ''); btn.hidden = true;
+    setText(note, autoConnecting ? 'Connecting your wallet…' : 'Connect your wallet to get your invite link.');
+    return;
+  }
+  const played = state.alltime > 0;
+  if(!refMine){ $('#refLinkRow').hidden = true; $('#refPickRow').hidden = true; setText(note, 'Loading your invites…'); return; }
+  const hasCode = !!refMine.code;
+  $('#refLinkRow').hidden = !(played && hasCode);
+  $('#refPickRow').hidden = !(played && !hasCode);
+  const l = $('#refLink'); if(l.value !== refUrl()) l.value = refUrl();
+  setText($('#refPre'), refOrigin().replace(/^https?:\/\/(www\.)?/, '') + '/r/');
+  const pb = $('#refPickBtn'); pb.disabled = refPicking; setText(pb, refPicking ? 'Creating…' : 'Create link');
+  setText($('#refCount'), `${refMine.paidCount}/${REF.maxPaid} paid`);
+  const { ready, pay, left } = refReady();
+  let msg = '';
+  if(REF.paused) msg = 'Invites are paused for now.';
+  else if(!played) msg = 'Feed CAG once to unlock your invite link.';
+  else if(!hasCode && !refMine.list.length) msg = 'Pick your link: 3 to 15 letters or numbers. It can\'t be changed later.';
+  else if(!refMine.list.length) msg = 'Nobody joined with your link yet. Rewards count from Monday, once the week closes.';
+  else if(ready.length && !left) msg = `You reached the limit of ${REF.maxPaid} paid friends.`;
+  else if(ready.length && !pay.length) msg = 'Rewards ready · the fund is being refilled, try again soon.';
+  setText(note, msg);
+  const th = REF.threshold, cw = CFG ? CFG.week : 0;
+  // cuando se puede cobrar una semana que ya llego: al cerrar la semana + las semanas de revision
+  const opens = w => { const k = w + 1 + REF.review - cw; return k <= 1 ? 'claim opens Monday' : `claim opens in ${k} weeks`; };
+  const rank = x => x.paid ? 3 : x.qWeek !== null ? 0 : (x.pending !== null || x.now >= th) ? 1 : (x.now || x.best) ? 2 : x.paid ? 3 : 4;
+  const rows = refMine.list.slice().sort((a,b) => rank(a) - rank(b));
+  const idle = rows.filter(x => rank(x) === 4).length;   // invitados que todavia no comieron nada
+  const active = rows.filter(x => rank(x) < 4);
+  const pages = Math.max(1, Math.ceil(active.length / REF_PAGE));
+  refPage = Math.min(Math.max(0, refPage), pages - 1);
+  const from = refPage * REF_PAGE, isLast = refPage === pages - 1;
+  setHTML(list, active.slice(from, from + REF_PAGE).map(x => {
+    let st, cls = '', pct;
+    if(x.paid){ st = 'Paid ✓'; cls = 'ok'; }
+    else if(x.qWeek !== null){ st = `Ready · ${fmtCag(REF.reward)} $CAG`; cls = 'go'; pct = 100; }
+    else if(x.pending !== null){ st = `${th.toLocaleString()} ✓ · ${opens(x.pending)}`; cls = 'ok'; pct = 100; }
+    else if(x.now >= th){ st = `${th.toLocaleString()} ✓ · ${opens(cw)}`; cls = 'ok'; pct = 100; }
+    else { st = `${x.now.toLocaleString()} / ${th.toLocaleString()} this week`; pct = Math.min(100, 100 * x.now / th); }
+    return `<li class="refrow" title="${x.addr}"><span class="l">${esc(x.name)}</span><span class="st ${cls}">${st}</span>${x.paid ? '' : `<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>`}</li>`;
+  }).join('') + (idle && isLast ? `<li class="refrow"><span class="l st" style="text-align:left">+${idle} invited, not playing yet</span><span></span></li>` : ''));
+  const pg = $('#refPager');
+  if(active.length > REF_PAGE){
+    pg.hidden = false;
+    setHTML(pg, `<button class="ghost pgbtn" id="refPrev" ${refPage===0?'disabled':''}>‹ Prev</button>
+      <span class="mono">${from+1}–${Math.min(from+REF_PAGE, active.length)} of ${active.length} friends</span>
+      <button class="ghost pgbtn" id="refNext" ${isLast?'disabled':''}>Next ›</button>`);
+    $('#refPrev').onclick = ()=>{ refPage--; renderRef(); };
+    $('#refNext').onclick = ()=>{ refPage++; renderRef(); };
+  } else pg.hidden = true;
+  btn.hidden = !pay.length || REF.paused;
+  btn.disabled = refClaiming;
+  if(pay.length) setText(btn, refClaiming ? 'Claiming…' : `Claim ${fmtCag(REF.reward * BigInt(pay.length))} $CAG`);
+}
+async function claimRefs(){
+  const { pay } = refReady(); if(!pay.length || refClaiming) return;
+  refClaiming = true; render();
+  try{
+    await sendTx('Claiming your invite rewards', () => pay.length === 1
+      ? refW.claim(pay[0].addr, pay[0].qWeek)
+      : refW.claimMany(pay.map(x => x.addr), pay.map(x => x.qWeek)));
+    toast(`🎉 ${fmtCag(REF.reward * BigInt(pay.length))} $CAG claimed`);
+    pay.forEach(x => x.paid = true); refMine.paidCount += pay.length;
+    await loadRefRules(); try{ await loadPlayer(); }catch(e){}
+    setTimeout(()=>{ loadRefPlayer().then(render); }, 3000);   // el RPC publico puede ir un bloque atras
+  }catch(e){ toast(errMsg(e)); }
+  finally{ refClaiming = false; render(); }
 }
 
 // ---------------- history (read from the contract: getHistory) ----------------
@@ -1314,7 +1603,7 @@ function render(){
   $('#connectBtn').hidden=showPill; $('#walletPill').hidden=!showPill;
   $('#walletPill').classList.toggle('connecting', !connected && autoConnecting);
   { const hb=$('#histBtn'); if(hb){ hb.hidden=!connected; if(!connected){ histOpen=false; $('#hist').hidden=true; } } }
-  $('#menu').classList.toggle('gated', !connected && !autoConnecting); renderTask(); renderCollab(); renderDrinks();
+  $('#menu').classList.toggle('gated', !connected && !autoConnecting); renderTask(); renderCollab(); renderDrinks(); renderRef();
   if(CFG){
     setText($('#weeklabel'), 'Week #'+CFG.week);
     const left=CFG.weekEnd-now(), d=Math.floor(left/864e5), hh=Math.floor(left%864e5/36e5), mm=Math.floor(left%36e5/6e4);
@@ -1378,6 +1667,7 @@ function render(){
 async function eat(f, skipOffer=false){
   if(remaining(f)>0 || (f.nftNeed && (state.nftCount||0) < f.nftNeed)) return;
   if(f.buy && !state.owned[f.id]) return;
+  await inviteGate();
   if(!skipOffer && f.cost && !state.supersized[f.id] && state.cag>=f.cost){
     const choice=await offerSupersize(f);
     if(choice==='super'){ await supersize(f); return; }
