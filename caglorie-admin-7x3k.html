@@ -170,7 +170,19 @@ async function loadDrinks(){
                    perDay:Number(info[4]), stock, max, total,
                    name:meta.name||('Drink #'+id), img:meta.game_image||meta.image||null, uri });
     }
-    drinks={collection:nftAddr, items};
+    // Bebidas creadas en la coleccion que el juego todavia no conoce (falta setDrink).
+    // Se miran los ids hasta 5 mas alla del mas alto conocido: existe si tiene tope de emision.
+    const known=new Set(items.map(d=>d.id)), top=items.reduce((m,d)=>Math.max(m,d.id),0)+5, pending=[];
+    for(let id=1;id<=top;id++){
+      if(known.has(id)) continue;
+      let max=0; try{ max=Number(await rpc(()=>c.maxSupply(id))); }catch(e){}
+      if(!(max>0)) continue;
+      let total=0; try{ total=Number(await rpc(()=>c.totalSupply(id))); }catch(e){}
+      let uri='', meta={};
+      try{ uri=await rpc(()=>c.uri(id)); const r=await fetch(uri); if(r.ok) meta=await r.json(); }catch(e){}
+      pending.push({ id, max, total, name:meta.name||('Drink #'+id), img:meta.game_image||meta.image||null, uri });
+    }
+    drinks={collection:nftAddr, items, pending};
   }catch(e){ console.warn('drinks',e); drinks={error:(e.reason||e.shortMessage||e.message)}; }
 }
 
@@ -370,18 +382,43 @@ function renderDrinks(){
         </div>
       </div>
     </div>`).join('');
+  const pend=(drinks.pending||[]).map(d=>`
+    <div class="panel" data-pending="${d.id}">
+      <div class="drink">
+        <div>${d.img?`<img src="${esc(d.img)}" alt="">`:'<div class="mono">#'+d.id+'</div>'}</div>
+        <div style="min-width:0">
+          <div class="dname">${esc(d.name)} <span class="tag no">NOT IN THE GAME YET</span> <span class="muted mono">id ${d.id}</span></div>
+          <div class="muted">minted ${d.total} of ${d.max}${d.img?'':' · no image found: check the json URL'}</div>
+          <div class="row">
+            <label>Mint</label><input type="number" min="1" value="${Math.max(0,d.max-d.total)}" data-mintamt="${d.id}" style="width:100px" ${dis}>
+            <button class="sm" data-mint="${d.id}" ${dis}>Mint to me</button>
+            <span class="muted">${d.max-d.total} left of this batch</span>
+            <input type="number" min="${d.total}" placeholder="new cap" data-capamt="${d.id}" style="width:110px" ${dis}>
+            <button class="sm" data-cap="${d.id}" ${dis}>Raise cap</button>
+          </div>
+          <div class="row">
+            <label>Calories</label>
+            <input type="number" min="1" placeholder="min" data-acmin="${d.id}" style="width:90px" ${dis}>
+            <input type="number" min="1" placeholder="max" data-acmax="${d.id}" style="width:90px" ${dis}>
+            <label>up to</label><input type="number" min="1" max="50" step="1" placeholder="n" data-apd="${d.id}" style="width:80px" ${dis}><span class="muted">a day · resets 00:00 UTC</span>
+            <button class="p sm" data-add="${d.id}" ${dis}>Add to the game</button>
+          </div>
+          <div class="muted">It is added switched off: players will not see it until you press Turn on.</div>
+        </div>
+      </div>
+    </div>`).join('');
   const nuevo=`
     <div class="panel">
       <h3>Add a new drink</h3>
-      <div class="sub">Upload its image and its json to your site first. Then create it here, mint it, and set its numbers.</div>
+      <div class="sub">1 · Upload its image and its json to your site. 2 · Create it here. 3 · It shows up above as "not in the game yet": set its numbers and add it to the game. 4 · Mint. 5 · Turn on.</div>
       <div class="row">
-        <label>id</label><input type="number" min="1" id="ndId" value="${drinks.items.reduce((m,d)=>Math.max(m,d.id),0)+1}" style="width:70px" ${dis}>
+        <label>id</label><input type="number" min="1" id="ndId" value="${drinks.items.concat(drinks.pending||[]).reduce((m,d)=>Math.max(m,d.id),0)+1}" style="width:70px" ${dis}>
         <label>json URL</label><input id="ndUri" placeholder="https://www.caglorie.com/nft/frozenslushie.json" style="width:330px" ${dis}>
         <label>max supply</label><input type="number" min="1" id="ndMax" value="500" style="width:100px" ${dis}>
         <button class="p" id="ndBtn" ${dis}>Create drink</button>
       </div>
     </div>`;
-  host.innerHTML=`<div class="muted mono" style="margin-bottom:10px">collection ${drinks.collection}</div>`+cards+nuevo+lockNote();
+  host.innerHTML=`<div class="muted mono" style="margin-bottom:10px">collection ${drinks.collection}</div>`+cards+pend+nuevo+lockNote();
   if(locked()) return;
   $$('[data-wd]').forEach(b=>b.onclick=()=>withdrawDrinks(+b.dataset.wd,+b.dataset.n));
   $$('[data-mint]').forEach(b=>b.onclick=()=>mintDrink(+b.dataset.mint));
@@ -389,6 +426,7 @@ function renderDrinks(){
   $$('[data-save]').forEach(b=>b.onclick=()=>saveDrink(+b.dataset.save,null));
   $$('[data-tog]').forEach(b=>b.onclick=()=>saveDrink(+b.dataset.tog,b.dataset.v==='1'));
   $('#ndBtn').onclick=createDrink;
+  $$('[data-add]').forEach(b=>b.onclick=()=>addDrinkToGame(+b.dataset.add));
 }
 
 // ------------------------------------------------------------ tarea diaria
@@ -933,11 +971,23 @@ async function saveDrink(id,enabledOverride){
   if(!(Number.isInteger(perDay)&&perDay>=1&&perDay<=50)) return alert('Per day: a whole number between 1 and 50');
   tx('Saving the drink', ()=>gameW.setDrink(id,cMin,cMax,perDay,enabled));
 }
+// Da de alta en el juego una bebida que ya existe en la coleccion. Entra apagada.
+async function addDrinkToGame(id){
+  const cMin=val(`[data-acmin="${id}"]`), cMax=val(`[data-acmax="${id}"]`), perDay=val(`[data-apd="${id}"]`);
+  if(!(cMin>0&&cMax>=cMin)) return alert('Check the calories');
+  if(!(Number.isInteger(perDay)&&perDay>=1&&perDay<=50)) return alert('Per day: a whole number between 1 and 50');
+  if(!confirm(`Add drink #${id} to the game?\n\n${cMin}–${cMax} calories · up to ${perDay} a day\n\nIt starts switched off.`)) return;
+  tx('Adding the drink to the game', ()=>gameW.setDrink(id,cMin,cMax,perDay,false));
+}
 async function createDrink(){
   const id=val('#ndId'), uri=txt('#ndUri'), max=val('#ndMax');
   if(!(id>0)||!uri||!(max>0)) return alert('Complete the three fields');
   if(!/^(https?|ipfs):\/\//i.test(uri)) return alert('The json URL looks wrong');
-  if(!confirm(`Create drink #${id} with a cap of ${max}?\n\n${uri}`)) return;
+  let meta=null; try{ const r=await fetch(uri); if(r.ok) meta=await r.json(); }catch(e){}
+  if(!meta||!meta.name||!(meta.image||meta.game_image)){
+    if(!confirm(`I could not read a name and an image from that json:\n\n${uri}\n\nOpen that link in a new tab and check it. A wrong link cannot be fixed from this panel.\n\nCreate the drink anyway?`)) return;
+  }
+  if(!confirm(`Create drink #${id}${meta&&meta.name?' ('+meta.name+')':''} with a cap of ${max}?\n\n${uri}`)) return;
   tx('Creating the drink', ()=>drinksW().createDrink(id,uri,max));
 }
 function csv(){
