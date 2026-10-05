@@ -98,7 +98,8 @@ const RPC='https://api.roninchain.com/rpc', CHAIN_ID=2020, CHAIN_HEX='0x7e4';
 const FOODS=['Snack','Meal','Big Order','Chocolate'];
 const ro=new ethers.JsonRpcProvider(RPC,CHAIN_ID,{staticNetwork:true,batchMaxCount:1}), game=new ethers.Contract(CONTRACT,ABI,ro);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function rpc(fn,tries=6){ for(let i=0;;i++){ try{ const v=await fn(); await sleep(60); return v; }catch(e){ const m=(e.message||'')+(e.info?JSON.stringify(e.info):''); if(i<tries&&/429|Too many|SERVER_ERROR|rate/i.test(m)){ await sleep(400*(i+1)); continue; } throw e; } } }
+let rpcHold=0;   // si el RPC avisa que vamos muy rapido, todas las lecturas frenan un momento
+async function rpc(fn,tries=6){ for(let i=0;;i++){ const w=rpcHold-Date.now(); if(w>0) await sleep(w); try{ const v=await fn(); await sleep(60); return v; }catch(e){ const m=(e.message||'')+(e.info?JSON.stringify(e.info):''); if(i<tries&&/429|Too many|SERVER_ERROR|rate/i.test(m)){ rpcHold=Math.max(rpcHold,Date.now()+400*(i+1)); await sleep(400*(i+1)); continue; } throw e; } } }
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const fmt=v=>Math.floor(Number(ethers.formatUnits(v,18))).toLocaleString('en-US');
 const cag=v=>Number(ethers.formatUnits(v,18));
@@ -113,43 +114,116 @@ if(CHAIN_ID!==2020) $('#net').classList.add('test');
 $$('.tabs button').forEach(b=>b.onclick=()=>{
   $$('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
   $$('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+b.dataset.tab));
-  if(b.dataset.tab==='refs' && !refs) reloadRefs();   // se lee recien al abrir la pestaña
+  activeTab=b.dataset.tab;
+  if(activeTab==='refs'){ if(!refs) reloadRefs(); return; }   // referidos tiene su propia carga
+  ensure(activeTab);                                            // el resto se lee recien al abrir la pestaña
 });
 
 // ============================================================ carga general
-async function load(){
-  $('#msg').textContent='Reading contract…';
-  const cfg=await rpc(()=>game.getConfig()); const cw=Number(cfg._week);
-  let week=$('#week').value===''?cw:Number($('#week').value); $('#week').value=week;
+// Carga por pestaña. Antes cada carga (y cada transaccion) releia todo el panel, con varias
+// lecturas por jugador. Ahora se lee lo basico y despues solo la pestaña que se esta mirando.
+let core=null, activeTab='week';
+const fresh={}, busy={}, gen={week:0,task:0,eaten:0};
+const bannedMemo=new Map(), claimedMemo=new Set();
+const errText=e=>(e&&(e.reason||e.shortMessage||e.message))||String(e);
+// varias lecturas a la vez (de a n) en vez de una atras de la otra; devuelve en el mismo orden
+async function pmap(list, fn, n=4){
+  const out=new Array(list.length); let i=0;
+  await Promise.all(Array.from({length:Math.min(n,list.length)}, async()=>{ while(i<list.length){ const k=i++; out[k]=await fn(list[k],k); } }));
+  return out;
+}
+const readAll=fns=>pmap(fns, f=>rpc(f));
+// Datos por jugador que usan varias pestañas: se leen una sola vez
+async function isBanned(a){ const k=a.toLowerCase(); if(bannedMemo.has(k)) return bannedMemo.get(k); const v=await rpc(()=>game.banned(a)); bannedMemo.set(k,v); return v; }
+async function hasClaimed(w,a){ const k=w+':'+a.toLowerCase(); if(claimedMemo.has(k)) return true; const v=await rpc(()=>game.claimed(w,a)); if(v) claimedMemo.add(k); return v; }   // cobrado es definitivo
+async function isContractAddr(a){   // una wallet no pasa a ser contrato: se recuerda en este navegador
+  const k='cagadm_code_'+a.toLowerCase();
+  try{ const c=localStorage.getItem(k); if(c!==null) return c==='1'; }catch(e){}
+  const code=await rpc(()=>ro.getCode(a)), v=!!code&&code!=='0x';
+  try{ localStorage.setItem(k,v?'1':'0'); }catch(e){}
+  return v;
+}
 
+// Lo basico: semana actual, minimo, precios. Pocas lecturas, siempre.
+async function loadCore(){
+  $('#msg').textContent='Reading contract…';
+  const [cfg,announced,nftReq,claimWeeks,treasury,nftAddr,owner,genesis]=await readAll([
+    ()=>game.getConfig(), ()=>game.announcedPool(), ()=>game.getNftRequired(), ()=>game.claimWeeks(),
+    ()=>game.treasury(), ()=>game.nft(), ()=>game.owner(), ()=>game.genesis() ]);
+  if(!cagAddr) cagAddr=await rpc(()=>game.cag());
   econ={ calMin:cfg._calMin.map(Number), calMax:cfg._calMax.map(Number),
          cooldowns:cfg._cooldowns.map(v=>Number(v)/3600), superPrice:cfg._supersizePrice.map(cag),
          chocolate:cag(cfg._chocolatePrice), minCal:Number(cfg._minCalories),
-         announced:cag(await rpc(()=>game.announcedPool())),
-         nftReq:(await rpc(()=>game.getNftRequired())).map(Number) };
+         announced:cag(announced), nftReq:nftReq.map(Number) };
+  adv={ claimWeeks:Number(claimWeeks), treasury, nft:nftAddr, owner, cag:cagAddr, genesis:Number(genesis)*1000 };
+  core={ cw:Number(cfg._week), min:Number(cfg._minCalories), claimWeeks:Number(claimWeeks) };
+}
 
-  const [players,cals,names]=await rpc(()=>game.getLeaderboard(week));
-  const pool_=await rpc(()=>game.weekPool(week)), qual=await rpc(()=>game.weekQualifiedCalories(week)), min=Number(cfg._minCalories);
-  const ends=Number(await rpc(()=>game.weekEndsAt(week)))*1000;
-  const claimWeeks=Number(await rpc(()=>game.claimWeeks()));
-  if(!cagAddr) cagAddr=await rpc(()=>game.cag());
-  const cagBal=await rpc(()=>new ethers.Contract(cagAddr,ERC20_ABI,ro).balanceOf(CONTRACT));
-  adv={ claimWeeks, treasury:await rpc(()=>game.treasury()), nft:await rpc(()=>game.nft()),
-        owner:await rpc(()=>game.owner()), cag:cagAddr, genesis:Number(await rpc(()=>game.genesis()))*1000 };
-
-  const rows=[];
-  for(let i=0;i<players.length;i++){
-    const a=players[i], cal=Number(cals[i]);
-    $('#msg').textContent=`Reading player ${i+1} of ${players.length}…`;
-    const claimed=await rpc(()=>game.claimed(week,a)), banned=await rpc(()=>game.banned(a)), code=await rpc(()=>ro.getCode(a));
-    const share=(cal>=min&&qual>0n)?pool_*BigInt(cal)/qual:0n;
-    rows.push({rank:0,name:names[i]||'',addr:a,cal,share,qualified:cal>=min,claimed,banned,isContract:code&&code!=='0x'});
-  }
+// Pestaña "Week & players": la tabla aparece enseguida y el detalle de cada jugador se completa despues
+async function loadWeek(){
+  const g=++gen.week, cw=core.cw, min=core.min;
+  let week=$('#week').value===''?cw:Number($('#week').value); $('#week').value=week;
+  $('#msg').textContent=`Reading week ${week}…`;
+  const [lb,pool_,qual,endsAt,cagBal]=await readAll([
+    ()=>game.getLeaderboard(week), ()=>game.weekPool(week), ()=>game.weekQualifiedCalories(week), ()=>game.weekEndsAt(week),
+    ()=>new ethers.Contract(cagAddr,ERC20_ABI,ro).balanceOf(CONTRACT) ]);
+  if(g!==gen.week) return;
+  const [players,cals,names]=lb;
+  const rows=[...players].map((a,i)=>{ const cal=Number(cals[i]);
+    return {rank:0,name:names[i]||'',addr:a,cal,share:(cal>=min&&qual>0n)?pool_*BigInt(cal)/qual:0n,qualified:cal>=min,claimed:null,banned:null,isContract:null}; });
   rows.sort((x,y)=>y.cal-x.cal); rows.forEach((r,i)=>r.rank=i+1);
-  data={week,rows,pool:pool_,qual:Number(qual),min,cw,ends,claimWeeks,cagBal};
-  await loadEaten();
-  await loadDrinks(); await loadCollab(); await loadTask(); await loadPool();
-  render();
+  data={week,rows,pool:pool_,qual:Number(qual),min,cw,ends:Number(endsAt)*1000,claimWeeks:core.claimWeeks,cagBal,details:false};
+  if(eaten&&eaten.week!==week) eaten=null;
+  renderWeek(); renderEaten();
+  // detalle: baneado (siempre), cobrado (solo semanas cerradas y jugadores que califican) y si es un contrato
+  let done=0;
+  await pmap(rows, async r=>{
+    const banned=await isBanned(r.addr);
+    const claimed=(week<cw&&r.qualified)?await hasClaimed(week,r.addr):false;
+    const isContract=await isContractAddr(r.addr);
+    r.banned=banned; r.claimed=claimed; r.isContract=isContract;
+    if(g===gen.week&&(++done%10===0)) $('#msg').textContent=`Reading player ${done} of ${rows.length}…`;
+  });
+  if(g!==gen.week) return;
+  data.details=true; renderWeek();
+}
+
+const HOSTS={ food:'#foodPanel', drinks:'#drinksPanel', task:'#taskPanel', pool:'#poolPanel', advanced:'#advPanel' };
+const SECTION={
+  week: loadWeek,
+  food: async()=>{ renderFood(); },
+  drinks: async()=>{ await loadDrinks(); renderDrinks(); },
+  task: async()=>{ await loadTask(); renderTask(); },
+  pool: async()=>{ await loadPool(); renderPool(); },
+  advanced: async()=>{ await loadCollab(); renderAdv(); },
+};
+function weekStatusLine(){
+  const d=data, status=d.week<d.cw?(d.cw>d.week+d.claimWeeks?'closed · claim window over':'closed · claiming open'):'in progress';
+  return `Week ${d.week} · ${status} · ends ${new Date(d.ends).toUTCString()}`;
+}
+function setStatus(){ if(Object.values(busy).some(Boolean)) return; $('#msg').textContent=data?weekStatusLine():'Done.'; }
+// Lee una pestaña si todavia no esta leida (o si quedo vieja despues de una transaccion)
+function ensure(tab){
+  if(!core || !SECTION[tab] || fresh[tab]) return Promise.resolve();
+  if(busy[tab]) return busy[tab];
+  if(HOSTS[tab]) $(HOSTS[tab]).innerHTML='<div class="panel muted">Reading…</div>';
+  busy[tab]=(async()=>{
+    try{ await SECTION[tab](); fresh[tab]=true; busy[tab]=null; setStatus(); }
+    catch(e){ console.error(e); busy[tab]=null;
+      if(HOSTS[tab]) $(HOSTS[tab]).innerHTML=`<div class="panel muted">Could not read this tab (${esc(errText(e))}). Open it again to retry.</div>`;
+      $('#msg').textContent='Error: '+errText(e); }
+  })();
+  return busy[tab];
+}
+// Carga inicial, boton Load y despues de cada transaccion: lo basico + la pestaña abierta.
+// Las demas quedan marcadas como viejas y se vuelven a leer cuando se abren.
+async function reloadAll(){
+  bannedMemo.clear();
+  await loadCore();
+  for(const k of Object.keys(fresh)) fresh[k]=false;
+  if(busy[activeTab]){ await busy[activeTab]; fresh[activeTab]=false; }
+  await ensure(activeTab);
+  setStatus();
 }
 
 async function loadDrinks(){
@@ -197,19 +271,21 @@ async function loadCollab(){
 }
 
 // ================================================================== render
-function render(){ renderWeek(); renderEaten(); renderFood(); renderDrinks(); renderTask(); renderPool(); renderAdv(); renderRefs(); }
+function render(){ if(data){ renderWeek(); renderEaten(); } if(fresh.food) renderFood(); if(fresh.drinks) renderDrinks(); if(fresh.task) renderTask(); if(fresh.pool) renderPool(); if(fresh.advanced) renderAdv(); renderRefs(); }
 const locked=()=>!signer||!isOwner;
 const lockNote=()=>locked()?'<div class="warn">Connect the owner wallet to use these buttons.</div>':'';
 
 // Cuantas veces se comio cada cosa en la semana elegida. No hace falta nada nuevo en el
 // contrato: cada comida queda en el historial del jugador con su semana y su tipo.
 async function loadEaten(){
-  eaten=null;
-  const w=data.week, by={};
+  if(!data) return;
+  const g=++gen.eaten, w=data.week, rows=data.rows, by={};
+  eaten={week:w, loading:true, done:0, total:rows.length}; renderEaten();
   try{
-    for(let i=0;i<data.rows.length;i++){
-      const a=data.rows[i].addr;
-      $('#msg').textContent=`Counting what player ${i+1} of ${data.rows.length} ate…`;
+    if(!fresh.drinks){ await loadDrinks(); fresh.drinks=true; renderDrinks(); }   // para los nombres de las bebidas
+    if(!collab) await loadCollab();                                               // y el del plato colab
+    await pmap(rows, async row=>{
+      const a=row.addr;
       let h=await rpc(()=>game.getHistory(a,200));
       // viene de la mas nueva a la mas vieja: si llenamos 200 y la mas vieja sigue siendo de
       // esta semana (o posterior), puede haber mas; se trae todo el historial
@@ -223,9 +299,12 @@ async function loadEaten(){
         const e=by[f]||(by[f]={food:f,count:0,players:new Set(),cal:0,doubled:0});
         e.count++; e.players.add(a.toLowerCase()); e.cal+=cal; if(dbl) e.doubled++;
       }
-    }
+      if(g===gen.eaten){ eaten.done++; const el=$('#eatProg'); if(el) el.textContent=`${eaten.done} of ${rows.length}`; }
+    }, 3);
+    if(g!==gen.eaten) return;
     eaten={week:w, by};
-  }catch(e){ console.warn('eaten',e); eaten={error:(e.reason||e.shortMessage||e.message)}; }
+  }catch(e){ if(g!==gen.eaten) return; console.warn('eaten',e); eaten={week:w, error:errText(e)}; }
+  renderEaten();
 }
 function foodName(f){
   if(f<4) return ['🍙 Snack','🍜 Meal','🍣 Big Order','🍫 Chocolate'][f];
@@ -236,8 +315,14 @@ function foodName(f){
 }
 function renderEaten(){
   const host=$('#eatenPanel'); if(!host) return;
-  if(!eaten){ host.innerHTML=''; return; }
-  if(eaten.error){ host.innerHTML=`<div class="panel muted">Could not count the servings (${esc(eaten.error)}).</div>`; return; }
+  if(!data){ host.innerHTML=''; return; }
+  if(!eaten||eaten.week!==data.week){
+    host.innerHTML=`<div class="panel"><h3>What was eaten in week ${data.week}</h3>
+      <div class="sub">How many times each dish and drink was served. It reads every player's history, so it takes a moment.</div>
+      <div class="row"><button class="p" id="eatBtn">Count the servings</button></div></div>`;
+    $('#eatBtn').onclick=()=>loadEaten(); return; }
+  if(eaten.loading){ host.innerHTML=`<div class="panel"><h3>What was eaten in week ${eaten.week}</h3><div class="sub">Counting… <span id="eatProg">${eaten.done} of ${eaten.total}</span> players read.</div></div>`; return; }
+  if(eaten.error){ host.innerHTML=`<div class="panel muted">Could not count the servings (${esc(eaten.error)}). <button class="sm" id="eatBtn">Try again</button></div>`; $('#eatBtn').onclick=()=>loadEaten(); return; }
   // siempre las 4 fijas + collab + cookie (aunque esten en 0), y las bebidas que existan o se hayan tomado
   const foods=new Set([0,1,2,3,4,255]);
   (drinks&&drinks.items||[]).forEach(d=>foods.add(4+d.id));
@@ -259,20 +344,22 @@ function renderEaten(){
         <td class="r mono">${e.doubled?e.doubled.toLocaleString('en-US'):'—'}</td></tr>`).join('')}
       </tbody></table>
       <div class="sub" style="margin-top:10px">The collab line counts the collab slot, whichever partner was on it. Swap partners on a Monday to keep each one's numbers clean.</div>
+      <div class="row"><button class="sm" id="eatAgain">Count again</button></div>
     </div>`;
+  $('#eatAgain').onclick=()=>loadEaten();
 }
 function renderWeek(){
-  const d=data, status=d.week<d.cw?(d.cw>d.week+d.claimWeeks?'closed · claim window over':'closed · claiming open'):'in progress';
-  $('#msg').textContent=`Week ${d.week} · ${status} · ends ${new Date(d.ends).toUTCString()}`;
+  const d=data; if(!d) return;
+  const known=d.details;   // false mientras se termina de leer baneado / cobrado de cada jugador
   const q=d.rows.filter(r=>r.qualified&&!r.banned), paid=d.rows.filter(r=>r.claimed).reduce((s,r)=>s+r.share,0n);
-  $('#cards').innerHTML=[['POOL',fmt(d.pool)+' $CAG'],['PLAYERS',d.rows.length],['QUALIFIED',q.length],['QUALIFIED CAL',d.qual.toLocaleString('en-US')],['CLAIMED',fmt(paid)+' $CAG'],['MIN',d.min.toLocaleString('en-US')+' cal']]
+  $('#cards').innerHTML=[['POOL',fmt(d.pool)+' $CAG'],['PLAYERS',d.rows.length],['QUALIFIED',known?q.length:'…'],['QUALIFIED CAL',d.qual.toLocaleString('en-US')],['CLAIMED',known?fmt(paid)+' $CAG':'…'],['MIN',d.min.toLocaleString('en-US')+' cal']]
     .map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
   $('#rows').innerHTML=d.rows.map(r=>`<tr class="${r.banned?'ban':r.qualified?'':'unq'}">
     <td>${r.rank}</td><td>${esc(r.name)||'<i>no name</i>'}${r.isContract?'<span class="tag ctr">CONTRACT</span>':''}</td>
     <td class="mono"><a href="https://app.roninchain.com/address/${r.addr}" target="_blank" rel="noopener">${r.addr}</a></td>
     <td class="r mono">${r.cal.toLocaleString('en-US')}</td><td class="r mono">${r.qualified?fmt(r.share)+' $CAG':'—'}</td>
-    <td>${r.banned?'<span class="tag no">BANNED</span>':r.claimed?'<span class="tag ok">CLAIMED</span>':r.qualified?'<span class="tag">pending</span>':'<span class="tag">below min</span>'}</td>
-    <td>${signer?`<button class="sm ${r.banned?'':'d'}" data-ban="${r.addr}" data-v="${r.banned?0:1}">${r.banned?'Unban':'Ban'}</button>`:''}</td></tr>`).join('') || '<tr><td colspan="7">No players this week.</td></tr>';
+    <td>${r.banned===null?'<span class="tag">…</span>':r.banned?'<span class="tag no">BANNED</span>':r.claimed?'<span class="tag ok">CLAIMED</span>':r.qualified?'<span class="tag">pending</span>':'<span class="tag">below min</span>'}</td>
+    <td>${signer&&r.banned!==null?`<button class="sm ${r.banned?'':'d'}" data-ban="${r.addr}" data-v="${r.banned?0:1}">${r.banned?'Unban':'Ban'}</button>`:''}</td></tr>`).join('') || '<tr><td colspan="7">No players this week.</td></tr>';
   $$('[data-ban]').forEach(b=>b.onclick=()=>ban(b.dataset.ban,b.dataset.v==='1'));
 }
 
@@ -434,21 +521,28 @@ const TASK_TITLE='RT & get a Cookie';   // el mismo que usa el juego si el titul
 // La Cookie: se pega el link del posteo en X y cada jugador la puede comer una vez por
 // posteo. Link nuevo = Cookie nueva para todos. Mismo link = solo cambia las calorias.
 async function loadTask(){
-  task=null;
+  const g=++gen.task; task=null;
   try{
     const t=await rpc(()=>game.getTask());
-    task={ id:Number(t[0]), enabled:t[1], cal:Number(t[2]), link:t[3], title:t[4], done:null };
-    // cuantos de los jugadores de la semana ya comieron la del posteo actual
-    if(task.id>0 && data && data.week===data.cw){
-      let n=0;
-      for(let i=0;i<data.rows.length;i++){
-        $('#msg').textContent=`Checking the daily task · player ${i+1} of ${data.rows.length}…`;
-        if(Number(await rpc(()=>game.taskDoneId(data.rows[i].addr)))>=task.id) n++;
-      }
-      task.done=n;
-    }
-  }catch(e){ console.warn('task',e); task={error:(e.reason||e.shortMessage||e.message)}; }
+    task={ id:Number(t[0]), enabled:t[1], cal:Number(t[2]), link:t[3], title:t[4], done:null, total:null, counting:false };
+  }catch(e){ console.warn('task',e); task={error:errText(e)}; }
+  if(!task.error && task.id>0) countTask(g, task);   // de fondo: no frena la pestaña
 }
+// cuantos de los jugadores de la semana en curso ya comieron la del posteo actual
+async function countTask(g, t){
+  t.counting=true; renderTaskCount();
+  try{
+    const players=(data&&data.week===core.cw)?data.rows.map(r=>r.addr):[...(await rpc(()=>game.getLeaderboard(core.cw)))[0]];
+    let n=0;
+    await pmap(players, async a=>{ if(Number(await rpc(()=>game.taskDoneId(a)))>=t.id) n++; });
+    t.done=n; t.total=players.length;
+  }catch(e){ console.warn('task count',e); }
+  t.counting=false;
+  if(g===gen.task) renderTaskCount();
+}
+const taskCountText=()=>{ const t=task; return !t||t.error?'—':t.counting?'counting…':t.done===null?'—':`${t.done} of ${t.total}`; };
+// solo se toca ese numero: redibujar toda la pestaña borraria lo que se este escribiendo
+function renderTaskCount(){ const el=$('#tkDone'); if(el) el.textContent=taskCountText(); }
 // Los links de X traen basura de seguimiento (?s=20&t=...). Se saca, asi el mismo
 // posteo siempre es el mismo link y no abre una ronda nueva sin querer.
 function cleanPostLink(u){
@@ -467,7 +561,7 @@ function renderTask(){
       <div class="card"><div class="k">IN THE GAME</div><div class="v">${!has?'never posted':t.enabled?'🍪 showing':'hidden'}</div></div>
       <div class="card"><div class="k">POST #</div><div class="v">${t.id||'—'}</div></div>
       <div class="card"><div class="k">COOKIE</div><div class="v">${has?t.cal.toLocaleString('en-US')+' cal':'—'}</div></div>
-      <div class="card"><div class="k">CLAIMED THIS POST</div><div class="v">${t.done===null?'—':`${t.done} of ${data.rows.length}`}</div></div>
+      <div class="card"><div class="k">CLAIMED THIS POST</div><div class="v" id="tkDone">${taskCountText()}</div></div>
     </div>
     <div class="panel">
       <h3>Today's post</h3>
@@ -542,29 +636,29 @@ async function weekClaims(w,funded,qual){
   let paid=0n, pending=0n;
   if(qual===0n) return {paid,pending,known:true};
   const [players,cals]=await rpc(()=>game.getLeaderboard(w));
-  for(let i=0;i<players.length;i++){
-    const cal=BigInt(cals[i]); if(cal<BigInt(data.min)) continue;
-    const share=funded*cal/qual;
-    if(await rpc(()=>game.claimed(w,players[i]))) { paid+=share; continue; }
-    if(await rpc(()=>game.banned(players[i]))) continue;   // no puede cobrar
-    pending+=share;
-  }
+  const list=[];
+  for(let i=0;i<players.length;i++){ const cal=BigInt(cals[i]); if(cal>=BigInt(core.min)) list.push({a:players[i], share:funded*cal/qual}); }
+  await pmap(list, async x=>{
+    if(await hasClaimed(w,x.a)){ paid+=x.share; return; }
+    if(await isBanned(x.a)) return;   // no puede cobrar
+    pending+=x.share;
+  });
   return {paid,pending,known:true};
 }
 
 async function loadPool(){
-  const cw=data.cw, claimWeeks=data.claimWeeks;
+  const cw=core.cw, claimWeeks=core.claimWeeks;
   if(poolWeek===null||poolWeek>cw) poolWeek=cw;
   const balance=await rpc(()=>new ethers.Contract(cagAddr,ERC20_ABI,ro).balanceOf(CONTRACT));
   const first=poolAll?0:Math.max(0,cw-9);
-  const weeks=[];
-  for(let w=first;w<=cw;w++){
-    $('#msg').textContent=`Reading the pool of week ${w}…`;
+  const ws=[]; for(let w=first;w<=cw;w++) ws.push(w);
+  $('#msg').textContent='Reading the pool of each week…';
+  const weeks=await pmap(ws, async w=>{
     const funded=await rpc(()=>game.weekPool(w));
     const qual=await rpc(()=>game.weekQualifiedCalories(w));
     const st=weekState(w,cw,claimWeeks,qual);
-    weeks.push({w,funded,qual,st,paid:null,pending:0n,known:st.key!=='claiming'});
-  }
+    return {w,funded,qual,st,paid:null,pending:0n,known:st.key!=='claiming'};
+  });
   // lo que el contrato todavia le debe a los jugadores
   let owed=0n;
   for(const r of weeks){
@@ -932,7 +1026,7 @@ async function tx(label, fn, reload=true){
     const t=await fn();
     $('#msg').textContent='Waiting for Ronin…';
     await t.wait();
-    if(reload) await load(); else $('#msg').textContent='Done.';
+    if(reload) await reloadAll(); else $('#msg').textContent='Done.';
   }catch(e){ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); }
 }
 const drinksW=()=>new ethers.Contract(drinks.collection,DRINKS_ABI,signer);
@@ -992,6 +1086,7 @@ async function createDrink(){
 }
 function csv(){
   if(!data) return;
+  if(!data.details) return alert('Still reading the players. Try again in a moment.');
   const lines=[['rank','name','wallet','calories','qualified','share_cag','claimed','banned','is_contract'].join(',')]
     .concat(data.rows.map(r=>[r.rank,`"${r.name.replace(/"/g,'""')}"`,r.addr,r.cal,r.qualified,ethers.formatUnits(r.share,18),r.claimed,r.banned,r.isContract].join(',')));
   lines.push('', `# week ${data.week}, pool ${ethers.formatUnits(data.pool,18)} CAG, qualified calories ${data.qual}, min ${data.min}, exported ${new Date().toISOString()}`);
@@ -1007,10 +1102,11 @@ async function connect(){
   isOwner=(await rpc(()=>game.owner())).toLowerCase()===me.toLowerCase();
   $('#connect').textContent=me.slice(0,6)+'…'+me.slice(-4)+(isOwner?' (owner)':' (NOT owner)');
   if(refs && refs.owner) isRefOwner=refs.owner.toLowerCase()===me.toLowerCase();
-  if(data) render(); else renderRefs();
+  render();
 }
-$('#load').onclick=()=>load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
+const boot=()=>reloadAll().catch(e=>{ $('#msg').textContent='Error: '+errText(e); console.error(e); });
+$('#load').onclick=boot;
 $('#csv').onclick=csv; $('#connect').onclick=connect;
 if(typeof ethers==='undefined'){ $('#msg').textContent='Error: could not load ethers.js (no internet or blocked CDN).'; }
-else load().catch(e=>{ $('#msg').textContent='Error: '+(e.reason||e.shortMessage||e.message); console.error(e); });
+else boot();
 </script></body></html>
